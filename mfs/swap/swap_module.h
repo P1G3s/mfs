@@ -5,4 +5,4 @@
 #include <linux/version.h>
 #include <linux/list.h>
 
-int ino_swap(void);
+int ino_swap(const char* src_name, const char* des_name);
