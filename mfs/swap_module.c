@@ -1,12 +1,13 @@
 #include "swap_module.h"
 
-#define strlength(x) (sizeof(x) / sizeof((x)[0]))
+#define SWAP(x,y,temp) {temp=x; x=y; y=temp;}
 #define SRCPATH "/home/p1g3s/workspace/mfs/TEMP/123"
 #define DESPATH "/home/p1g3s/workspace/mfs/TEMP/456"
 
 int ino_swap(){
 	struct path src_path;
 	struct path des_path;
+	struct inode* temp;
 	int ret = 0;
 
 	ret = kern_path(SRCPATH, LOOKUP_FOLLOW, &src_path);
@@ -19,8 +20,7 @@ int ino_swap(){
 	else path_put(&des_path);
 	printk( KERN_ALERT "swap_driver: DES_NAME: %s, INODE: %ld\n", des_path.dentry->d_name.name, des_path.dentry->d_inode->i_ino);
 
-
-	printk( KERN_ALERT "swap_driver:");
-
+	SWAP(src_path.dentry->d_inode, des_path.dentry->d_inode, temp);
+	printk( KERN_ALERT "swap_driver: FILE SWAPPED");
 	return 0;
 }
