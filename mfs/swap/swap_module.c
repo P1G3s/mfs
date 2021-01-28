@@ -2,8 +2,8 @@
 
 #define SWAP(x,y,temp) {temp=x; x=y; y=temp;}
 
-static inode_t** org_inode_list;
-static inode_t** new_inode_list;
+static inode_list org_inode_list[1];
+static inode_list new_inode_list[1];
 static int inode_count = 0;
 
 /*
@@ -18,25 +18,24 @@ void ino_init(){
 	}
 	return ret;
 }
+*/
 
 // STORE THE SWAPPED INODES
-void ino_alloc(inode_t* src_inode, inode_t* des_inode){
+void ino_alloc(inode_t** src_inode, inode_t** des_inode){
 	org_inode_list[inode_count] = src_inode;
 	new_inode_list[inode_count] = des_inode;
 	inode_count += 1;
 	// REALLOCATE THE LIST
-	org_inode_list = (inode_t**) krealloc(org_inode_list, sizeof(void*) * (inode_count), GFP_KERNEL);
-	new_inode_list = (inode_t**) krealloc(org_inode_list, sizeof(void*) * (inode_count), GFP_KERNEL);
+	org_inode_list = (inode_list*) krealloc(org_inode_list, sizeof(void*) * (inode_count), GFP_KERNEL);
+	new_inode_list = (inode_list*) krealloc(org_inode_list, sizeof(void*) * (inode_count), GFP_KERNEL);
 }
 
 void ino_recover(){
 	inode_t* temp;
-	inode_t src_inode;
-	inode_t des_inode;
 	for(int i=0; i<inode_count; i++){
+		SWAP(org_inode_list[i], new_inode_list[i], temp);
 	}
 }
-*/
 
 int ino_swap(const char* src_name, const char* des_name){
 	struct path src_path;
@@ -45,10 +44,6 @@ int ino_swap(const char* src_name, const char* des_name){
 	inode_t** des_inode;
 	inode_t* temp;
 	int ret = 0;
-
-	// INIT
-	src_inode = (inode_t**) kmalloc(sizeof(void**), GFP_KERNEL);
-	des_inode = (inode_t**) kmalloc(sizeof(void**), GFP_KERNEL);
 	
 	// INODE ACQUISITION
 	ret = kern_path(src_name, LOOKUP_FOLLOW, &src_path);
@@ -63,12 +58,8 @@ int ino_swap(const char* src_name, const char* des_name){
 	des_inode = &(des_path.dentry->d_inode);
 	printk(KERN_ALERT "SWAP_DRIVER: DES_NAME: %s, INODE: %ld\n", des_path.dentry->d_name.name, (*des_inode)->i_ino);
 
-	//SWAP((*src_inode), (*des_inode), temp);
-	temp = *src_inode;	
-	*src_inode = *des_inode;
-	*des_inode = temp;
+	ino_alloc(src_inode, des_inode);
+	SWAP((*src_inode), (*des_inode), temp);
 	printk(KERN_ALERT "SWAP_DRIVER: FILE SWAPPED\n");
-	kfree(src_inode);
-	kfree(des_inode);
 	return 0;
 }

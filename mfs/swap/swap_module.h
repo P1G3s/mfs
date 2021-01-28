@@ -7,5 +7,9 @@
 #include <linux/slab.h>
 
 typedef struct inode inode_t;
+typedef struct inode_list{
+	inode_t** inode;
+}inode_list
+
 
 int ino_swap(const char* src_name, const char* des_name);
