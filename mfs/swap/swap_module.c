@@ -2,38 +2,43 @@
 
 #define SWAP(x,y,temp) {temp=x; x=y; y=temp;}
 
-static inode_list org_inode_list[1];
-static inode_list new_inode_list[1];
+static inode_list* org_inode_list;
+static inode_list* new_inode_list;
 static int inode_count = 0;
 
-/*
 // INIT THE LIST
 void ino_init(){
-	int ret = 0;
-	org_inode_list = (inode_t**) kmalloc(sizeof(void*), GFP_KERNEL);
-	new_inode_list = (inode_t**) kmalloc(sizeof(void*), GFP_KERNEL);
-	if (!(src_inode && des_inode)) {
-		printk(KERN_ALERT,"SWAP_DRIVER: Failed to initialize the inode list");
-		ret = -1;
+	org_inode_list = (inode_list*) kmalloc(sizeof(void*), GFP_KERNEL);
+	new_inode_list = (inode_list*) kmalloc(sizeof(void*), GFP_KERNEL);
+	if (!(org_inode_list && new_inode_list)) {
+		printk(KERN_ALERT "SWAP_DRIVER: Failed to initialize the inode list");
 	}
-	return ret;
 }
-*/
 
 // STORE THE SWAPPED INODES
 void ino_alloc(inode_t** src_inode, inode_t** des_inode){
 	org_inode_list[inode_count] = src_inode;
 	new_inode_list[inode_count] = des_inode;
+	printk(KERN_ALERT "SWAP_DRIVER: Allocating for %ld and %ld\n",
+			(*org_inode_list[inode_count])->i_ino,
+			(*new_inode_list[inode_count])->i_ino);
 	inode_count += 1;
+	printk(KERN_ALERT "SWAP_DRIVER: Count = %d\n", inode_count);
+	
 	// REALLOCATE THE LIST
-	org_inode_list = (inode_list*) krealloc(org_inode_list, sizeof(void*) * (inode_count), GFP_KERNEL);
-	new_inode_list = (inode_list*) krealloc(org_inode_list, sizeof(void*) * (inode_count), GFP_KERNEL);
+	org_inode_list = (inode_list*) krealloc(org_inode_list, sizeof(void*) * (inode_count+1), GFP_KERNEL);
+	new_inode_list = (inode_list*) krealloc(new_inode_list, sizeof(void*) * (inode_count+1), GFP_KERNEL);
 }
 
 void ino_recover(){
 	inode_t* temp;
-	for(int i=0; i<inode_count; i++){
-		SWAP(org_inode_list[i], new_inode_list[i], temp);
+	int i = 0;
+	while(i < inode_count){
+		printk(KERN_ALERT "SWAP_DRIVER: Recovering from %ld to %ld\n", 
+				(*org_inode_list[i])->i_ino,
+				(*new_inode_list[i])->i_ino);
+		SWAP(*(org_inode_list[i]), *(new_inode_list[i]), temp);
+		i++;
 	}
 }
 

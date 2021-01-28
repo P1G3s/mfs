@@ -13,15 +13,16 @@ int register_device(void);
 void unregister_device(void);
 
 static int my_init(void){
-	printk(KERN_ALERT "INIT\n");
+	printk(KERN_ALERT "SWAP_DRIVER: ######## INIT ########\n");
 	register_device();	
-//	ino_init();
+	ino_init();
 	return 0;
 }
 
 static void my_exit(void){
-	printk(KERN_ALERT "TERMINATED\n");
+	ino_recover();
 	unregister_device();
+	printk(KERN_ALERT "SWAP_DRIVER: ##### TERMINATED #####\n\n\n");
 	return;
 }
 

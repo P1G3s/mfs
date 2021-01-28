@@ -7,9 +7,11 @@
 #include <linux/slab.h>
 
 typedef struct inode inode_t;
-typedef struct inode_list{
-	inode_t** inode;
-}inode_list
+typedef inode_t** inode_list;
 
 
-int ino_swap(const char* src_name, const char* des_name);
+
+int ino_swap(const char*, const char*);
+void ino_alloc(inode_t**, inode_t**);
+void ino_recover(void);
+void ino_init(void);
