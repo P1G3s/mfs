@@ -9,9 +9,8 @@
 typedef struct inode inode_t;
 typedef inode_t** inode_list;
 
-
-
 int ino_swap(const char*, const char*);
+int ino_is_swapped(const char*);
 void ino_alloc(inode_t**, inode_t**);
 void ino_recover(void);
 void ino_init(void);

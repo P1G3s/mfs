@@ -4,13 +4,15 @@
 
 static inode_list* org_inode_list;
 static inode_list* new_inode_list;
+static unsigned long* ino_list;
 static int inode_count = 0;
 
 // INIT THE LIST
 void ino_init(){
 	org_inode_list = (inode_list*) kmalloc(sizeof(void*), GFP_KERNEL);
 	new_inode_list = (inode_list*) kmalloc(sizeof(void*), GFP_KERNEL);
-	if (!(org_inode_list && new_inode_list)) {
+	ino_list = (unsigned long*) kmalloc(sizeof(void*), GFP_KERNEL);
+	if (!(org_inode_list && new_inode_list && ino_list)) {
 		printk(KERN_ALERT "SWAP_DRIVER: Failed to initialize the inode list");
 	}
 }
@@ -19,6 +21,7 @@ void ino_init(){
 void ino_alloc(inode_t** src_inode, inode_t** des_inode){
 	org_inode_list[inode_count] = src_inode;
 	new_inode_list[inode_count] = des_inode;
+	ino_list[inode_count] = (*des_inode)->i_ino;
 	printk(KERN_ALERT "SWAP_DRIVER: Allocating for %ld and %ld\n",
 			(*org_inode_list[inode_count])->i_ino,
 			(*new_inode_list[inode_count])->i_ino);
@@ -28,8 +31,10 @@ void ino_alloc(inode_t** src_inode, inode_t** des_inode){
 	// REALLOCATE THE LIST
 	org_inode_list = (inode_list*) krealloc(org_inode_list, sizeof(void*) * (inode_count+1), GFP_KERNEL);
 	new_inode_list = (inode_list*) krealloc(new_inode_list, sizeof(void*) * (inode_count+1), GFP_KERNEL);
+	ino_list = (unsigned long*) krealloc(ino_list, sizeof(void*) * (inode_count+1), GFP_KERNEL);
 }
 
+// RECOVER THE SWAPPED FILES BEFORE UNLOAD
 void ino_recover(){
 	inode_t* temp;
 	int i = 0;
@@ -42,6 +47,7 @@ void ino_recover(){
 	}
 }
 
+// SWAP FILES' INODES
 int ino_swap(const char* src_name, const char* des_name){
 	struct path src_path;
 	struct path des_path;
@@ -67,4 +73,25 @@ int ino_swap(const char* src_name, const char* des_name){
 	SWAP((*src_inode), (*des_inode), temp);
 	printk(KERN_ALERT "SWAP_DRIVER: FILE SWAPPED\n");
 	return 0;
+}
+
+// CHECK IF FILE IS ALREADY SWAPPED
+int ino_is_swapped(const char* file_name){
+	struct path file_path;
+	unsigned long cur_ino;
+	int ret = 0;
+	int i = 0;
+
+	ret = kern_path(file_name, LOOKUP_FOLLOW, &file_path);
+	if (ret) {pr_err("SWAP_DRIVER: Failed to look up source directory, err:%d\n", ret); return -1;}
+	else path_put(&file_path);
+	cur_ino = file_path.dentry->d_inode->i_ino; 
+	while (i < inode_count){
+		if (cur_ino == ino_list[i]){
+			ret = 1;
+			break;
+		}	
+		i++;
+	}
+	return ret;
 }
