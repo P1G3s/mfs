@@ -13,7 +13,7 @@ void ino_init(){
 	new_inode_list = (inode_list*) kmalloc(sizeof(void*), GFP_KERNEL);
 	ino_list = (unsigned long*) kmalloc(sizeof(void*), GFP_KERNEL);
 	if (!(org_inode_list && new_inode_list && ino_list)) {
-		printk(KERN_ALERT "SWAP_DRIVER: Failed to initialize the inode list");
+		printk(KERN_WARNING "SWAP_DRIVER: Failed to initialize the inode list\n");
 	}
 }
 
@@ -22,11 +22,8 @@ void ino_alloc(inode_t** src_inode, inode_t** des_inode){
 	org_inode_list[inode_count] = src_inode;
 	new_inode_list[inode_count] = des_inode;
 	ino_list[inode_count] = (*des_inode)->i_ino;
-	printk(KERN_ALERT "SWAP_DRIVER: Allocating for %ld and %ld\n",
-			(*org_inode_list[inode_count])->i_ino,
-			(*new_inode_list[inode_count])->i_ino);
 	inode_count += 1;
-	printk(KERN_ALERT "SWAP_DRIVER: Count = %d\n", inode_count);
+	printk(KERN_NOTICE "SWAP_DRIVER: Count = %d\n", inode_count);
 	
 	// REALLOCATE THE LIST
 	org_inode_list = (inode_list*) krealloc(org_inode_list, sizeof(void*) * (inode_count+1), GFP_KERNEL);
@@ -38,10 +35,8 @@ void ino_alloc(inode_t** src_inode, inode_t** des_inode){
 void ino_recover(){
 	inode_t* temp;
 	int i = 0;
+	printk(KERN_ALERT "SWAP_DRIVER: Recovering\n"); 
 	while(i < inode_count){
-		printk(KERN_ALERT "SWAP_DRIVER: Recovering from %ld to %ld\n", 
-				(*org_inode_list[i])->i_ino,
-				(*new_inode_list[i])->i_ino);
 		SWAP(*(org_inode_list[i]), *(new_inode_list[i]), temp);
 		i++;
 	}
@@ -58,20 +53,18 @@ int ino_swap(const char* src_name, const char* des_name){
 	
 	// INODE ACQUISITION
 	ret = kern_path(src_name, LOOKUP_FOLLOW, &src_path);
+	printk(KERN_ALERT "SWAP_DRIVER: Swapping '%s' to '%s'\n", src_name, des_name);
 	if (ret) {pr_err("SWAP_DRIVER: Failed to look up source directory, err:%d\n", ret); return 1;}
 	else path_put(&src_path);
 	src_inode = &(src_path.dentry->d_inode);
-	printk(KERN_ALERT "SWAP_DRIVER: SRC_NAME: %s, INODE: %ld\n", src_path.dentry->d_name.name, (*src_inode)->i_ino);
 
 	ret = kern_path(des_name, LOOKUP_FOLLOW, &des_path);
 	if (ret) {pr_err("SWAP_DRIVER: Failed to look up target directory, err:%d\n", ret); return 1;}
 	else path_put(&des_path);
 	des_inode = &(des_path.dentry->d_inode);
-	printk(KERN_ALERT "SWAP_DRIVER: DES_NAME: %s, INODE: %ld\n", des_path.dentry->d_name.name, (*des_inode)->i_ino);
 
 	ino_alloc(src_inode, des_inode);
 	SWAP((*src_inode), (*des_inode), temp);
-	printk(KERN_ALERT "SWAP_DRIVER: FILE SWAPPED\n");
 	return 0;
 }
 

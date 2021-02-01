@@ -38,11 +38,10 @@ static ssize_t device_file_read( struct file *file_ptr,
 									loff_t *position){
 	char read_val;
 
-	printk(KERN_NOTICE "SWAP_DRIVER: Device file is being read");
 	read_val = swap_flag ? 'Y':'N';
+	printk(KERN_ALERT "SWAP_DRIVER: Read '%c'\n", read_val);
 	if (copy_to_user(user_buffer, &read_val, 1) != 0)
 		return -EFAULT;
-	swap_flag = 0;
 	return count;
 }
 
@@ -52,40 +51,49 @@ static ssize_t device_file_write( struct file *file_ptr,
 									loff_t *position){
 	int src_len, des_len;
 	char* sep; char* src_name; char* des_name;
-	printk(KERN_NOTICE "SWAP_DRIVER: Device file has been written with '%s'\n", buffer);
+	printk(KERN_ALERT "SWAP_DRIVER: WRITE '%s'\n", buffer);
 	// CHECK SWAPPED REQUEST
-	if (!(sep = strchr(buffer, ' '))){
-		src_len = length;
+	if (buffer[0] == 'C'){
+		buffer += 1;
+	  	length -= 1;
+		src_len = strchr(buffer,'\n') ? length-1 : length;
 		src_name = (char*) kmalloc(sizeof(char) * (src_len), GFP_KERNEL);
 		if (strncpy_from_user(src_name, buffer, src_len) == -EFAULT){
-			printk(KERN_NOTICE "SWAP_DRIVER: Failed to get buffer from user\n");
+			printk(KERN_WARNING "SWAP_DRIVER: Failed to get buffer from user\n");
 			length = -1;
 			goto finish;
 		}
 		swap_flag = ino_is_swapped(src_name);	
 		kfree(src_name);
+		length += 1;
 	}
 	// SWAP FILE REQUEST
-	else{
+	else if (buffer[0] == 'S'){
+		sep = strchr(buffer, ' ');
+		buffer += 1;
+		length -= 1;
 		src_len = sep-buffer;
-		des_len = strchr(sep+1,'\n') ? (buffer+length)-sep-2 : (buffer+length)-sep-1;
+		des_len = strchr(buffer, '\n') ? (buffer+length)-sep-2 : (buffer+length)-sep-1;
 		src_name = (char*) kmalloc(sizeof(char) * (src_len), GFP_KERNEL);
 		des_name = (char*) kmalloc(sizeof(char) * (des_len), GFP_KERNEL);
 		if (strncpy_from_user(src_name, buffer, src_len) == -EFAULT){
-			printk(KERN_NOTICE "SWAP_DRIVER: Failed to get buffer from user\n");
+			printk(KERN_WARNING "SWAP_DRIVER: Failed to get buffer from user\n");
 			length = -1;
 			goto finish;
 		}
 		if (strncpy_from_user(des_name, sep+1, des_len) == -EFAULT){
-			printk(KERN_NOTICE "SWAP_DRIVER: Failed to get buffer from user\n");
+			printk(KERN_WARNING "SWAP_DRIVER: Failed to get buffer from user\n");
 			length = -1;
 			goto finish;
 		}
-		printk(KERN_NOTICE "SWAP_DRIVER: Write src_name :'%s'\n", src_name);
-		printk(KERN_NOTICE "SWAP_DRIVER: Write des_name :'%s'\n", des_name);
 		ino_swap(src_name, des_name);
 		kfree(src_name);
 		kfree(des_name);
+		length += 1;
+	}
+	// RECOVER
+	else {
+		ino_recover();
 	}
 finish:
 	return length;
@@ -103,14 +111,13 @@ static const char device_name[]="SWAP_DRIVER";
 
 int swap_register_device(void){
 	int result = 0;
-	//printk( KERN_NOTICE "SWAP_DRIVER: register_device() is called.\n");
 	result = register_chrdev( 0, device_name, &swap_fops );
 	if ( result<0 ){
-		printk( KERN_WARNING "SWAP_DRIVER: cant register char device with error code = %i\n", result );
+		printk( KERN_WARNING "SWAP_DRIVER: CAN NOT register char device with error code = %i\n", result );
 		return result;
 	}
 	device_file_major_number = result;
-	printk( KERN_NOTICE "SWAP_DRIVER: registered char device with major number = %i\n", device_file_major_number );
+	printk( KERN_NOTICE "SWAP_DRIVER: Registered. Major number = %i\n", device_file_major_number );
 	return 0;
 }
 
