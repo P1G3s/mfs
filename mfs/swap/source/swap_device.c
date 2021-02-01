@@ -51,6 +51,8 @@ static ssize_t device_file_write( struct file *file_ptr,
 									loff_t *position){
 	int src_len, des_len;
 	char* sep; char* src_name; char* des_name;
+	char is_swapped;
+
 	printk(KERN_ALERT "SWAP_DRIVER: WRITE '%s'\n", buffer);
 	// CHECK SWAPPED REQUEST
 	if (buffer[0] == 'C'){
@@ -64,6 +66,8 @@ static ssize_t device_file_write( struct file *file_ptr,
 			goto finish;
 		}
 		swap_flag = ino_is_swapped(src_name);	
+		is_swapped = swap_flag ? 'Y':'N';
+		printk(KERN_NOTICE "SWAP_DRIVER: Is it swapped? -> '%c'\n", is_swapped);
 		kfree(src_name);
 		length += 1;
 	}

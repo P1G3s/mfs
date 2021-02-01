@@ -4,14 +4,15 @@
 
 static inode_list* org_inode_list;
 static inode_list* new_inode_list;
-static unsigned long* ino_list;
-static int inode_count = 0;
+static unsigned long* ino_list; // FOR CHECKING IF INDOES ARE SWAPPED
+static int inode_count;
 
 // INIT THE LIST
 void ino_init(){
 	org_inode_list = (inode_list*) kmalloc(sizeof(void*), GFP_KERNEL);
 	new_inode_list = (inode_list*) kmalloc(sizeof(void*), GFP_KERNEL);
 	ino_list = (unsigned long*) kmalloc(sizeof(void*), GFP_KERNEL);
+	inode_count = 0;
 	if (!(org_inode_list && new_inode_list && ino_list)) {
 		printk(KERN_WARNING "SWAP_DRIVER: Failed to initialize the inode list\n");
 	}
@@ -35,11 +36,16 @@ void ino_alloc(inode_t** src_inode, inode_t** des_inode){
 void ino_recover(){
 	inode_t* temp;
 	int i = 0;
-	printk(KERN_ALERT "SWAP_DRIVER: Recovering\n"); 
+	printk(KERN_ALERT "SWAP_DRIVER: Recover\n");
 	while(i < inode_count){
 		SWAP(*(org_inode_list[i]), *(new_inode_list[i]), temp);
+		printk(KERN_NOTICE "SWAP_DRIVER: Recovering '%ld' <-> '%ld'\n", (*org_inode_list[i])->i_ino, (*new_inode_list[i])->i_ino); 
 		i++;
 	}
+	kfree(org_inode_list);
+	kfree(new_inode_list);
+	kfree(ino_list);
+	ino_init();
 }
 
 // SWAP FILES' INODES
@@ -75,6 +81,7 @@ int ino_is_swapped(const char* file_name){
 	int ret = 0;
 	int i = 0;
 
+	printk(KERN_ALERT "SWAP_DRIVER: Checking\n");
 	ret = kern_path(file_name, LOOKUP_FOLLOW, &file_path);
 	if (ret) {pr_err("SWAP_DRIVER: Failed to look up source directory, err:%d\n", ret); return -1;}
 	else path_put(&file_path);

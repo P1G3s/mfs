@@ -41,15 +41,23 @@ static ssize_t device_file_write( struct file *file_ptr,
 									loff_t *position){
 	int src_len;
 	char* src_name;
-	printk(KERN_NOTICE "HIDE_DRIVER: Device file has been written with '%s'\n", buffer);
+	printk(KERN_NOTICE "HIDE_DRIVER: Write '%s'\n", buffer);
 	// CHECK HIDEPED REQUEST
-	src_len = length;
-	src_name = (char*) kmalloc(sizeof(char) * (src_len), GFP_KERNEL);
-	if (strncpy_from_user(src_name, buffer, src_len) == -EFAULT){
-		printk(KERN_NOTICE "HIDE_DRIVER: Failed to get buffer from user\n");
-		length = -1;
+	if (buffer[0] == 'H'){
+		buffer += 1;
+		length -= 1;
+		src_len = strchr(buf, '\n') ? length-1 : length;
+		src_name = (char*) kmalloc(sizeof(char) * (src_len), GFP_KERNEL);
+		if (strncpy_from_user(src_name, buffer, src_len) == -EFAULT){
+			printk(KERN_NOTICE "HIDE_DRIVER: Failed to get buffer from user\n");
+			length = -1;
+		}
+		// #HIDE CODE HERE#
+		kfree(src_name);
 	}
-	kfree(src_name);
+	else if (buffer[0] == 'R'){
+		// #RECOVER CODE HERE#
+	}
 }
 
 
@@ -70,7 +78,7 @@ int hide_register_device(void){
 		return result;
 	}
 	device_file_major_number = result;
-	printk( KERN_NOTICE "HIDE_DRIVER: Registered char device with major number = %i\n", device_file_major_number );
+	printk( KERN_NOTICE "HIDE_DRIVER: Registered, Major number = %i\n", device_file_major_number );
 	return 0;
 }
 
