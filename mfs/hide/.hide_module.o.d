@@ -1,10 +1,12 @@
-hide_device.o: /home/p1g3s/workspace/mfs/hide/hide_device.c \
+hide_module.o: /home/p1g3s/workspace/mfs/hide/hide_module.c \
  include/linux/kconfig.h include/generated/autoconf.h \
  include/linux/compiler_types.h include/linux/compiler_attributes.h \
- include/linux/compiler-gcc.h include/linux/fs.h include/linux/linkage.h \
- include/linux/compiler_types.h include/linux/stringify.h \
- include/linux/export.h include/linux/compiler.h \
- include/uapi/linux/types.h arch/x86/include/generated/uapi/asm/types.h \
+ include/linux/compiler-gcc.h \
+ /home/p1g3s/workspace/mfs/hide/hide_module.h include/linux/fs.h \
+ include/linux/linkage.h include/linux/compiler_types.h \
+ include/linux/stringify.h include/linux/export.h \
+ include/linux/compiler.h include/uapi/linux/types.h \
+ arch/x86/include/generated/uapi/asm/types.h \
  include/uapi/asm-generic/types.h include/asm-generic/int-ll64.h \
  include/uapi/asm-generic/int-ll64.h \
  arch/x86/include/uapi/asm/bitsperlong.h \
@@ -198,23 +200,17 @@ hide_device.o: /home/p1g3s/workspace/mfs/hide/hide_device.c \
  include/linux/dqblk_v1.h include/linux/dqblk_v2.h \
  include/linux/dqblk_qtree.h include/linux/projid.h \
  include/uapi/linux/quota.h include/linux/nfs_fs_i.h \
- include/linux/module.h include/linux/kmod.h include/linux/umh.h \
- include/linux/sysctl.h include/uapi/linux/sysctl.h include/linux/elf.h \
- arch/x86/include/asm/elf.h arch/x86/include/asm/user.h \
- arch/x86/include/asm/user_64.h arch/x86/include/asm/fsgsbase.h \
- arch/x86/include/asm/vdso.h include/uapi/linux/elf.h \
- include/uapi/linux/elf-em.h include/linux/kobject.h \
- include/linux/sysfs.h include/linux/kernfs.h include/linux/idr.h \
- include/linux/kobject_ns.h include/linux/kref.h \
+ include/linux/namei.h include/linux/module.h include/linux/kmod.h \
+ include/linux/umh.h include/linux/sysctl.h include/uapi/linux/sysctl.h \
+ include/linux/elf.h arch/x86/include/asm/elf.h \
+ arch/x86/include/asm/user.h arch/x86/include/asm/user_64.h \
+ arch/x86/include/asm/fsgsbase.h arch/x86/include/asm/vdso.h \
+ include/uapi/linux/elf.h include/uapi/linux/elf-em.h \
+ include/linux/kobject.h include/linux/sysfs.h include/linux/kernfs.h \
+ include/linux/idr.h include/linux/kobject_ns.h include/linux/kref.h \
  include/linux/moduleparam.h include/linux/rbtree_latch.h \
  include/linux/error-injection.h include/asm-generic/error-injection.h \
  arch/x86/include/asm/module.h include/asm-generic/module.h \
- arch/x86/include/asm/orc_types.h include/linux/cdev.h \
- include/linux/device.h include/linux/ioport.h include/linux/klist.h \
- include/linux/pm.h include/linux/ratelimit.h \
- arch/x86/include/asm/device.h include/linux/pm_wakeup.h \
- arch/x86/include/asm/uaccess.h arch/x86/include/asm/smap.h \
- arch/x86/include/asm/extable.h arch/x86/include/asm/uaccess_64.h \
- include/linux/uaccess.h include/linux/slab.h \
- include/linux/percpu-refcount.h include/linux/kasan.h \
- /home/p1g3s/workspace/mfs/hide/hide_module.h
+ arch/x86/include/asm/orc_types.h include/generated/uapi/linux/version.h \
+ include/linux/slab.h include/linux/percpu-refcount.h \
+ include/linux/kasan.h /home/p1g3s/workspace/mfs/hide/hide_child_op.c

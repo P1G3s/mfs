@@ -33,6 +33,7 @@ static ssize_t device_file_read( struct file *file_ptr,
 									char __user *user_buffer,
 									size_t count,
 									loff_t *position){
+	return count;
 }
 
 static ssize_t device_file_write( struct file *file_ptr,
@@ -46,18 +47,20 @@ static ssize_t device_file_write( struct file *file_ptr,
 	if (buffer[0] == 'H'){
 		buffer += 1;
 		length -= 1;
-		src_len = strchr(buf, '\n') ? length-1 : length;
+		src_len = strchr(buffer, '\n') ? length-1 : length;
 		src_name = (char*) kmalloc(sizeof(char) * (src_len), GFP_KERNEL);
 		if (strncpy_from_user(src_name, buffer, src_len) == -EFAULT){
 			printk(KERN_NOTICE "HIDE_DRIVER: Failed to get buffer from user\n");
 			length = -1;
 		}
 		// #HIDE CODE HERE#
+		length += 1;
 		kfree(src_name);
 	}
 	else if (buffer[0] == 'R'){
 		// #RECOVER CODE HERE#
 	}
+	return length;
 }
 
 

@@ -53,7 +53,7 @@ static ssize_t device_file_write( struct file *file_ptr,
 	char* sep; char* src_name; char* des_name;
 	char is_swapped;
 
-	printk(KERN_ALERT "SWAP_DRIVER: WRITE '%s'\n", buffer);
+	printk(KERN_ALERT "SWAP_DRIVER: Write '%s'\n", buffer);
 	// CHECK SWAPPED REQUEST
 	if (buffer[0] == 'C'){
 		buffer += 1;

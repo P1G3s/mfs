@@ -5,12 +5,16 @@
 #endif
 
 #define _GNU_SOURCE
+#define MAXLEN 256
 
 #ifdef linux
 /* For pread()/pwrite()/utimensat() */
 #define _XOPEN_SOURCE 700
 #endif
 
+#include <sys/types.h>
+#include <sys/xattr.h>
+#include <stdlib.h>
 #include <fuse.h>
 #include <stdio.h>
 #include <string.h>
@@ -29,6 +33,25 @@
 #endif
 
 #include "passthrough_helpers.h"
+
+static int logfd;
+static int delete_count;
+static char** delete_list;
+
+static void mfs_log(const char* msg){
+	write(logfd, msg, strlen(msg));
+}
+
+static void mfs_recover(){
+	char* buffer;
+	int val = 0;
+	for (int i=0; i<delete_count; i++){
+		buffer = delete_list[i];
+		setxattr(buffer, "user.mfs_delete", &val, sizeof(int), 0); 	
+		free(buffer);
+	}
+	free(delete_list);
+}
 
 static void *mfs_init(struct fuse_conn_info *conn,
 		      struct fuse_config *cfg)
@@ -93,6 +116,9 @@ static int mfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 {
 	DIR *dp;
 	struct dirent *de;
+	char file_path[MAXLEN];
+	int attr_value;
+	int res;
 
 	(void) offset;
 	(void) fi;
@@ -103,6 +129,21 @@ static int mfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		return -errno;
 
 	while ((de = readdir(dp)) != NULL) {
+		strcpy(file_path, path);	
+		strcat(file_path, "/");
+		strcat(file_path, de->d_name);
+		mfs_log(file_path);
+
+		// CHECK FOR DELETED FILE
+		res = getxattr(file_path, "user.mfs_delete", &attr_value, sizeof(int));
+		if (res != ENODATA){
+			if (attr_value == 1){
+				mfs_log("\n");
+				continue;
+			}
+		}
+		mfs_log("\n");
+
 		struct stat st;
 		memset(&st, 0, sizeof(st));
 		st.st_ino = de->d_ino;
@@ -140,10 +181,19 @@ static int mfs_mkdir(const char *path, mode_t mode)
 static int mfs_unlink(const char *path)
 {
 	int res;
+	int val=1;
+	char* buffer;
 
-	res = unlink(path);
+	res = setxattr(path, "user.mfs_delete", &val, sizeof(int), 0); 	
 	if (res == -1)
 		return -errno;
+	buffer = (char*) malloc(strlen(path)*sizeof(char));
+	strcpy(buffer, path);
+	delete_list[delete_count] = buffer;
+	delete_count += 1;
+	delete_list = (char**) realloc(delete_list, (delete_count+1)*(sizeof(void*)));
+	
+	//res = unlink(path);
 
 	return 0;
 }
@@ -387,7 +437,7 @@ static int mfs_fallocate(const char *path, int mode,
 static int mfs_setxattr(const char *path, const char *name, const char *value,
 			size_t size, int flags)
 {
-	int res = lsetxattr(path, name, value, size, flags);
+	int res = setxattr(path, name, value, size, flags);
 	if (res == -1)
 		return -errno;
 	return 0;
@@ -527,5 +577,11 @@ static const struct fuse_operations mfs_oper = {
 int main(int argc, char *argv[])
 {
 	umask(0);
+
+	// INIT STUFF
+	delete_count = 0;
+	delete_list = (char**) malloc(sizeof(void*));
+	fclose(fopen("mfs.log", "w"));
+	logfd = open("/home/p1g3s/workspace/mfs/mfs.log", O_CREAT | O_RDWR | O_APPEND);
 	return fuse_main(argc, argv, &mfs_oper, NULL);
 }
