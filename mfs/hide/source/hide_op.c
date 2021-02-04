@@ -43,10 +43,9 @@ int new_open (struct inode * old_inode, struct file * old_file)
 	return -2;
 }
 
-static struct file_operations new_child_fop =
+static struct file_operations new_fop =
 {
 	.owner=THIS_MODULE,
-	.readdir=new_readdir,
 	.release=new_release,
 	.open=new_open,
 	.read=new_read, 
@@ -68,8 +67,8 @@ int new_getattr (struct vfsmount *mnt, struct dentry * new_dentry, struct kstat 
 	return -2;
 }
 
-static struct inode_operations new_child_iop =
+static struct inode_operations new_iop =
 {
-	.getattr=new_getattr,
+	//.getattr=new_getattr,
 	.rmdir=new_rmdir,
 };

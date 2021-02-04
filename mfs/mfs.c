@@ -35,22 +35,12 @@
 #include "passthrough_helpers.h"
 
 static int logfd;
+static int hidefd;
 static int delete_count;
 static char** delete_list;
 
 static void mfs_log(const char* msg){
 	write(logfd, msg, strlen(msg));
-}
-
-static void mfs_recover(){
-	char* buffer;
-	int val = 0;
-	for (int i=0; i<delete_count; i++){
-		buffer = delete_list[i];
-		setxattr(buffer, "user.mfs_delete", &val, sizeof(int), 0); 	
-		free(buffer);
-	}
-	free(delete_list);
 }
 
 static void *mfs_init(struct fuse_conn_info *conn,
@@ -138,7 +128,7 @@ static int mfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		res = getxattr(file_path, "user.mfs_delete", &attr_value, sizeof(int));
 		if (res != ENODATA){
 			if (attr_value == 1){
-				mfs_log("\n");
+				mfs_log("   NODATA\n");
 				continue;
 			}
 		}
@@ -180,20 +170,15 @@ static int mfs_mkdir(const char *path, mode_t mode)
 
 static int mfs_unlink(const char *path)
 {
+	/*
 	int res;
-	int val=1;
-	char* buffer;
-
-	res = setxattr(path, "user.mfs_delete", &val, sizeof(int), 0); 	
+	res = unlink(path);
 	if (res == -1)
 		return -errno;
-	buffer = (char*) malloc(strlen(path)*sizeof(char));
-	strcpy(buffer, path);
-	delete_list[delete_count] = buffer;
-	delete_count += 1;
-	delete_list = (char**) realloc(delete_list, (delete_count+1)*(sizeof(void*)));
-	
-	//res = unlink(path);
+	*/
+	if (write(hidefd, "R", 1) == -1){
+		return -1;
+	}
 
 	return 0;
 }
@@ -583,5 +568,10 @@ int main(int argc, char *argv[])
 	delete_list = (char**) malloc(sizeof(void*));
 	fclose(fopen("mfs.log", "w"));
 	logfd = open("/home/p1g3s/workspace/mfs/mfs.log", O_CREAT | O_RDWR | O_APPEND);
+	hidefd = open("/dev/hide_device", O_RDWR);
+	if ((logfd == -1) || (hidefd == -1)){
+		printf("Failed to open logs or device\n");
+		return -1;
+	}
 	return fuse_main(argc, argv, &mfs_oper, NULL);
 }

@@ -15,6 +15,7 @@ void hide_unregister_device(void);
 
 static int my_init(void){
 	printk(KERN_ALERT "HIDE_DRIVER: ######## INIT ########\n");
+	hide_ino_init();
 	hide_register_device();	
 	return 0;
 }
@@ -53,13 +54,14 @@ static ssize_t device_file_write( struct file *file_ptr,
 			printk(KERN_NOTICE "HIDE_DRIVER: Failed to get buffer from user\n");
 			length = -1;
 		}
-		// #HIDE CODE HERE#
+		hide_ino_hide(src_name);
 		length += 1;
 		kfree(src_name);
 	}
 	else if (buffer[0] == 'R'){
-		// #RECOVER CODE HERE#
+		hide_ino_recover();	
 	}
+	printk(KERN_NOTICE "HIDE_DRIVER: Invalid write");
 	return length;
 }
 

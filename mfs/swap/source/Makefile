@@ -16,7 +16,7 @@ clean:
 
 load:
 	insmod ./$(TARGET_MODULE).ko
-	(lsmod | grep swap_driver) && (mknod /dev/swap_device c 240 0) && (chmod 666 /dev/swap_device)
+	(cat /proc/devices | grep SWAP_DRIVER) && (mknod /dev/swap_device c 240 0) && (chmod 666 /dev/swap_device)
 
 
 unload:

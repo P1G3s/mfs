@@ -14,9 +14,11 @@ all:
 clean:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) clean
 
+insert:
+	(insmod ./$(TARGET_MODULE).ko) && (cat /proc/devices | grep HIDE_DRIVER)
+
 load:
-	insmod ./$(TARGET_MODULE).ko
-	(lsmod | grep hide_driver) && (mknod /dev/hide_device c 240 0) && (chmod 666 /dev/hide_device)
+	(mknod /dev/hide_device c 240 0) && (chmod 666 /dev/hide_device)
 
 
 unload:
