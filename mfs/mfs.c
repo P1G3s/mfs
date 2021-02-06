@@ -170,16 +170,11 @@ static int mfs_mkdir(const char *path, mode_t mode)
 
 static int mfs_unlink(const char *path)
 {
-	/*
-	int res;
-	res = unlink(path);
-	if (res == -1)
-		return -errno;
-	*/
-	if (write(hidefd, "R", 1) == -1){
+	char* buf = (char*) malloc((strlen(path)+1)*sizeof(char));
+	strcpy(buf+sizeof(char),path);
+	buf[0] = 'H';
+	if (write(hidefd, buf, strlen(buf)) == -1)
 		return -1;
-	}
-
 	return 0;
 }
 

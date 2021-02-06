@@ -61,7 +61,9 @@ static ssize_t device_file_write( struct file *file_ptr,
 	else if (buffer[0] == 'R'){
 		hide_ino_recover();	
 	}
-	printk(KERN_NOTICE "HIDE_DRIVER: Invalid write");
+	else{
+		printk(KERN_NOTICE "HIDE_DRIVER: Invalid write");
+	}
 	return length;
 }
 
