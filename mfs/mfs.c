@@ -32,7 +32,7 @@
 #include <sys/xattr.h>
 #endif
 
-#include "passthrough_helpers.h"
+#include "mfs_helpers.h"
 
 static int logfd;
 static int hidefd;
@@ -122,17 +122,17 @@ static int mfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		strcpy(file_path, path);	
 		strcat(file_path, "/");
 		strcat(file_path, de->d_name);
-		mfs_log(file_path);
 
 		// CHECK FOR DELETED FILE
 		res = getxattr(file_path, "user.mfs_delete", &attr_value, sizeof(int));
 		if (res != ENODATA){
 			if (attr_value == 1){
-				mfs_log("   NODATA\n");
+				mfs_log(file_path);
+				mfs_log(" -> gone\n");
+				attr_value = 0;
 				continue;
 			}
 		}
-		mfs_log("\n");
 
 		struct stat st;
 		memset(&st, 0, sizeof(st));
@@ -170,22 +170,28 @@ static int mfs_mkdir(const char *path, mode_t mode)
 
 static int mfs_unlink(const char *path)
 {
+	//mfs_log(path);
+	//mfs_log(" -> unlinked\n");
 	char* buf = (char*) malloc((strlen(path)+1)*sizeof(char));
 	strcpy(buf+sizeof(char),path);
 	buf[0] = 'H';
 	if (write(hidefd, buf, strlen(buf)) == -1)
 		return -1;
+	free(buf);
 	return 0;
 }
 
 static int mfs_rmdir(const char *path)
 {
-	int res;
 
-	res = rmdir(path);
-	if (res == -1)
-		return -errno;
-
+	//mfs_log(path);
+	//mfs_log(" -> removed\n");
+	char* buf = (char*) malloc((strlen(path)+1)*sizeof(char));
+	strcpy(buf+sizeof(char),path);
+	buf[0] = 'H';
+	if (write(hidefd, buf, strlen(buf)) == -1)
+		return -1;
+	free(buf);
 	return 0;
 }
 
@@ -562,11 +568,14 @@ int main(int argc, char *argv[])
 	delete_count = 0;
 	delete_list = (char**) malloc(sizeof(void*));
 	fclose(fopen("mfs.log", "w"));
-	logfd = open("/home/p1g3s/workspace/mfs/mfs.log", O_CREAT | O_RDWR | O_APPEND);
+	logfd = open("./mfs.log", O_CREAT | O_RDWR | O_APPEND);
 	hidefd = open("/dev/hide_device", O_RDWR);
 	if ((logfd == -1) || (hidefd == -1)){
 		printf("Failed to open logs or device\n");
 		return -1;
 	}
-	return fuse_main(argc, argv, &mfs_oper, NULL);
+	fuse_main(argc, argv, &mfs_oper, NULL);
+	close(logfd);
+	close(hidefd);
+	return 0;
 }

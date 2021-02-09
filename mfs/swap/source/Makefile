@@ -14,10 +14,12 @@ all:
 clean:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) clean
 
-load:
-	insmod ./$(TARGET_MODULE).ko
-	(cat /proc/devices | grep SWAP_DRIVER) && (mknod /dev/swap_device c 240 0) && (chmod 666 /dev/swap_device)
+insert:
+	(insmod ./$(TARGET_MODULE).ko)
 
+load: insert 
+	$(eval SWAP_MAJOR_NUMBER := $(shell cat /proc/devices | grep SWAP_DRIVER | tr -d -c 0-9))
+	(mknod /dev/swap_device c $(SWAP_MAJOR_NUMBER) 0) && (chmod 666 /dev/swap_device)
 
 unload:
 	(rmmod $(TARGET_MODULE)) && (rm /dev/swap_device)

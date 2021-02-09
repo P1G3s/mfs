@@ -36,15 +36,16 @@ void ino_alloc(inode_t** src_inode, inode_t** des_inode){
 void ino_recover(){
 	inode_t* temp;
 	int i = 0;
-	printk(KERN_ALERT "SWAP_DRIVER: Recover\n");
+	printk(KERN_ALERT "SWAP_DRIVER: ### Recovering ###\n");
 	while(i < inode_count){
 		SWAP(*(org_inode_list[i]), *(new_inode_list[i]), temp);
-		printk(KERN_NOTICE "SWAP_DRIVER: Recovering '%ld' <-> '%ld'\n", (*org_inode_list[i])->i_ino, (*new_inode_list[i])->i_ino); 
+		printk(KERN_NOTICE "SWAP_DRIVER: %d. '%ld' <-> '%ld'\n", i, (*org_inode_list[i])->i_ino, (*new_inode_list[i])->i_ino); 
 		i++;
 	}
 	kfree(org_inode_list);
 	kfree(new_inode_list);
 	kfree(ino_list);
+	printk(KERN_ALERT "SWAP_DRIVER: ### Done ###\n");
 	ino_init();
 }
 
