@@ -36,12 +36,6 @@ static ssize_t device_file_read( struct file *file_ptr,
 									char __user *user_buffer,
 									size_t count,
 									loff_t *position){
-	char read_val;
-
-	read_val = swap_flag ? 'Y':'N';
-	printk(KERN_ALERT "SWAP_DRIVER: Read '%c'\n", read_val);
-	if (copy_to_user(user_buffer, &read_val, 1) != 0)
-		return -EFAULT;
 	return count;
 }
 
@@ -51,10 +45,11 @@ static ssize_t device_file_write( struct file *file_ptr,
 									loff_t *position){
 	int src_len, des_len;
 	char* sep; char* src_name; char* des_name;
-	char is_swapped;
+	//char is_swapped;
 
 	printk(KERN_ALERT "SWAP_DRIVER: Write '%s'\n", buffer);
 	// CHECK SWAPPED REQUEST
+	/*
 	if (buffer[0] == 'C'){
 		buffer += 1;
 	  	length -= 1;
@@ -71,8 +66,9 @@ static ssize_t device_file_write( struct file *file_ptr,
 		kfree(src_name);
 		length += 1;
 	}
+	*/
 	// SWAP FILE REQUEST
-	else if (buffer[0] == 'S'){
+	if (buffer[0] == 'S'){
 		sep = strchr(buffer, ' ');
 		buffer += 1;
 		length -= 1;

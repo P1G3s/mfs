@@ -34,13 +34,15 @@
 
 #include "mfs_helpers.h"
 
-static int logfd;
-static int hidefd;
-static int delete_count;
-static char** delete_list;
+#define TEMPDIR "/home/P1G3s/WorkSpace/MFS/mfs/TEMP/"
+
+static int log_fd;
+static int hide_fd;
+static int swap_fd;
+static int temp_count;
 
 static void mfs_log(const char* msg){
-	write(logfd, msg, strlen(msg));
+	write(log_fd, msg, strlen(msg));
 }
 
 static void *mfs_init(struct fuse_conn_info *conn,
@@ -175,7 +177,7 @@ static int mfs_unlink(const char *path)
 	char* buf = (char*) malloc((strlen(path)+1)*sizeof(char));
 	strcpy(buf+sizeof(char),path);
 	buf[0] = 'H';
-	if (write(hidefd, buf, strlen(buf)) == -1)
+	if (write(hide_fd, buf, strlen(buf)) == -1)
 		return -1;
 	free(buf);
 	return 0;
@@ -189,7 +191,7 @@ static int mfs_rmdir(const char *path)
 	char* buf = (char*) malloc((strlen(path)+1)*sizeof(char));
 	strcpy(buf+sizeof(char),path);
 	buf[0] = 'H';
-	if (write(hidefd, buf, strlen(buf)) == -1)
+	if (write(hide_fd, buf, strlen(buf)) == -1)
 		return -1;
 	free(buf);
 	return 0;
@@ -341,12 +343,54 @@ static int mfs_write(const char *path, const char *buf, size_t size,
 {
 	int fd;
 	int res;
+	int ret;
+	int val;
 
 	(void) fi;
-	if(fi == NULL)
+	ret = getxattr(path, "user.mfs_swap", &val, sizeof(int));
+	if (ret == ENODATA || val == 0){
+		int len, ret; 
+		int write_len;
+		char* write_val;
+		char* temp_path;
+		int temp_fd, src_fd;
+		struct stat src_stat;
+
+		temp_path = (char*) malloc(sizeof(char)*(strlen(TEMPDIR)+10));
+		if (sprintf(temp_path, "%s%d", TEMPDIR, temp_count) < 0) {mfs_log("Failed to create path\n"); return -2;}
+		temp_count += 1;
+
+		// COPY
+		temp_fd = open(temp_path, O_RDWR | O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
+		if (temp_fd == -1) return -errno;
+		src_fd = open(path, O_RDWR);
+		if (fstat(src_fd, &src_stat) == -1) return -errno;
+		len = src_stat.st_size;
+		do{
+			ret = copy_file_range(src_fd, NULL, temp_fd, NULL, len, 0);
+			if (ret == -1) return -errno;
+			len -= ret;
+		}while (len > 0);
+		close(temp_fd); close(src_fd);
+
+		// SWAP
+		write_len = strlen(path)+strlen(temp_path)+2;
+		write_val = (char*) malloc(sizeof(char)* write_len);
+		write_val[0] = 'S';
+		strcpy(write_val+1, path);
+		strcat(write_val, " ");
+		strcat(write_val, temp_path);
+		if (write(swap_fd, write_val, write_len) == -1) {mfs_log("Failed to swap\n"); return -2;}
+		
+		free(write_val); free(temp_path);
+	}
+	/*
+	if (fi == NULL)
 		fd = open(path, O_WRONLY);
 	else
 		fd = fi->fh;
+	*/
+	fd = open(path, O_WRONLY);
 	
 	if (fd == -1)
 		return -errno;
@@ -381,12 +425,8 @@ static int mfs_release(const char *path, struct fuse_file_info *fi)
 static int mfs_fsync(const char *path, int isdatasync,
 		     struct fuse_file_info *fi)
 {
-	/* Just a stub.	 This method is optional and can safely be left
-	   unimplemented */
-
 	(void) path;
-	(void) isdatasync;
-	(void) fi;
+	close(fi->fh);
 	return 0;
 }
 
@@ -546,15 +586,6 @@ static const struct fuse_operations mfs_oper = {
 	.release	= mfs_release,
 	.fsync		= mfs_fsync,
 #ifdef HAVE_POSIX_FALLOCATE
-	.fallocate	= mfs_fallocate,
-#endif
-#ifdef HAVE_SETXATTR
-	.setxattr	= mfs_setxattr,
-	.getxattr	= mfs_getxattr,
-	.listxattr	= mfs_listxattr,
-	.removexattr	= mfs_removexattr,
-#endif
-#ifdef HAVE_COPY_FILE_RANGE
 	.copy_file_range = mfs_copy_file_range,
 #endif
 	.lseek		= mfs_lseek,
@@ -565,17 +596,18 @@ int main(int argc, char *argv[])
 	umask(0);
 
 	// INIT STUFF
-	delete_count = 0;
-	delete_list = (char**) malloc(sizeof(void*));
+	temp_count = 0;
 	fclose(fopen("mfs.log", "w"));
-	logfd = open("./mfs.log", O_CREAT | O_RDWR | O_APPEND);
-	hidefd = open("/dev/hide_device", O_RDWR);
-	if ((logfd == -1) || (hidefd == -1)){
+	log_fd = open("./mfs.log", O_CREAT | O_RDWR | O_APPEND);
+	hide_fd = open("/dev/hide_device", O_RDWR);
+	swap_fd = open("/dev/swap_device", O_RDWR);
+	if ((swap_fd == -1) || (log_fd == -1) || (hide_fd == -1)){
 		printf("Failed to open logs or device\n");
 		return -1;
 	}
 	fuse_main(argc, argv, &mfs_oper, NULL);
-	close(logfd);
-	close(hidefd);
+	close(log_fd);
+	close(hide_fd);
+	close(swap_fd);
 	return 0;
 }
