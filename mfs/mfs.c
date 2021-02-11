@@ -13,8 +13,8 @@
 #endif
 
 #include <sys/types.h>
-#include <sys/xattr.h>
 #include <stdlib.h>
+#include <sys/xattr.h>
 #include <fuse.h>
 #include <stdio.h>
 #include <string.h>
@@ -39,10 +39,36 @@
 static int log_fd;
 static int hide_fd;
 static int swap_fd;
+static int recover_fd;
 static int temp_count;
 
 static void mfs_log(const char* msg){
 	write(log_fd, msg, strlen(msg));
+}
+
+static void mfs_recover_log(const char* msg){
+	write(recover_fd, msg, strlen(msg));
+	write(recover_fd, "\n", 1);
+}
+
+
+static int copy_to_temp(const char* src_path, const char* temp_path){
+	int src_fd, temp_fd;
+	int ret, len;
+	struct stat src_stat;
+	
+	temp_fd = open(temp_path, O_RDWR | O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
+	if (temp_fd == -1) return -errno;
+	src_fd = open(src_path, O_RDWR);
+	if (fstat(src_fd, &src_stat) == -1) return -errno;
+	len = src_stat.st_size;
+	do{
+		ret = copy_file_range(src_fd, NULL, temp_fd, NULL, len, 0);
+		if (ret == -1) return -errno;
+		len -= ret;
+	}while (len > 0);
+	close(src_fd); close(temp_fd);
+	return 0;
 }
 
 static void *mfs_init(struct fuse_conn_info *conn,
@@ -130,7 +156,7 @@ static int mfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		if (res != ENODATA){
 			if (attr_value == 1){
 				mfs_log(file_path);
-				mfs_log(" -> gone\n");
+				mfs_log(" -> hidden\n");
 				attr_value = 0;
 				continue;
 			}
@@ -162,8 +188,11 @@ static int mfs_mknod(const char *path, mode_t mode, dev_t rdev)
 static int mfs_mkdir(const char *path, mode_t mode)
 {
 	int res;
+	int val = 1;
 
 	res = mkdir(path, mode);
+	setxattr(path, "user.mfs_swap", &val, sizeof(int), 0);
+	mfs_recover_log(path);
 	if (res == -1)
 		return -errno;
 
@@ -294,8 +323,11 @@ static int mfs_create(const char *path, mode_t mode,
 		      struct fuse_file_info *fi)
 {
 	int res;
+	int val = 1;
 
 	res = open(path, fi->flags, mode);
+	setxattr(path, "user.mfs_swap", &val, sizeof(int), 0);
+	mfs_recover_log(path);
 	if (res == -1)
 		return -errno;
 
@@ -306,8 +338,14 @@ static int mfs_create(const char *path, mode_t mode,
 static int mfs_open(const char *path, struct fuse_file_info *fi)
 {
 	int res;
+	int val = 1;
 
 	res = open(path, fi->flags);
+	if ((fi->flags & O_CREAT) == O_CREAT){
+		setxattr(path, "user.mfs_swap", &val, sizeof(int), 0);
+		mfs_recover_log(path);
+	}
+
 	if (res == -1)
 		return -errno;
 
@@ -349,29 +387,18 @@ static int mfs_write(const char *path, const char *buf, size_t size,
 	(void) fi;
 	ret = getxattr(path, "user.mfs_swap", &val, sizeof(int));
 	if (ret == ENODATA || val == 0){
-		int len, ret; 
 		int write_len;
 		char* write_val;
 		char* temp_path;
-		int temp_fd, src_fd;
-		struct stat src_stat;
 
 		temp_path = (char*) malloc(sizeof(char)*(strlen(TEMPDIR)+10));
 		if (sprintf(temp_path, "%s%d", TEMPDIR, temp_count) < 0) {mfs_log("Failed to create path\n"); return -2;}
 		temp_count += 1;
 
 		// COPY
-		temp_fd = open(temp_path, O_RDWR | O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
-		if (temp_fd == -1) return -errno;
-		src_fd = open(path, O_RDWR);
-		if (fstat(src_fd, &src_stat) == -1) return -errno;
-		len = src_stat.st_size;
-		do{
-			ret = copy_file_range(src_fd, NULL, temp_fd, NULL, len, 0);
-			if (ret == -1) return -errno;
-			len -= ret;
-		}while (len > 0);
-		close(temp_fd); close(src_fd);
+		if (copy_to_temp(path, temp_path) != 0)
+			return -errno;
+		
 
 		// SWAP
 		write_len = strlen(path)+strlen(temp_path)+2;
@@ -598,9 +625,11 @@ int main(int argc, char *argv[])
 	// INIT STUFF
 	temp_count = 0;
 	fclose(fopen("mfs.log", "w"));
+	fclose(fopen("mfs.recover", "w"));
 	log_fd = open("./mfs.log", O_CREAT | O_RDWR | O_APPEND);
 	hide_fd = open("/dev/hide_device", O_RDWR);
 	swap_fd = open("/dev/swap_device", O_RDWR);
+	recover_fd = open("./mfs.recover", O_RDWR);
 	if ((swap_fd == -1) || (log_fd == -1) || (hide_fd == -1)){
 		printf("Failed to open logs or device\n");
 		return -1;

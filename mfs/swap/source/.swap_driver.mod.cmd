@@ -1,0 +1,1 @@
+cmd_/home/P1G3s/WorkSpace/MFS/mfs/swap/source/swap_driver.mod := { echo  /home/P1G3s/WorkSpace/MFS/mfs/swap/source/swap_device.o /home/P1G3s/WorkSpace/MFS/mfs/swap/source/swap_module.o; echo; } > /home/P1G3s/WorkSpace/MFS/mfs/swap/source/swap_driver.mod

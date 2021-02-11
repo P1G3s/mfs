@@ -1,0 +1,1 @@
+cmd_/home/P1G3s/WorkSpace/MFS/mfs/swap/source/swap_driver.ko := ld -r -m elf_x86_64  -z max-page-size=0x200000 -T ./scripts/module-common.lds --build-id  -o /home/P1G3s/WorkSpace/MFS/mfs/swap/source/swap_driver.ko /home/P1G3s/WorkSpace/MFS/mfs/swap/source/swap_driver.o /home/P1G3s/WorkSpace/MFS/mfs/swap/source/swap_driver.mod.o ;  true
