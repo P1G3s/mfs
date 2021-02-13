@@ -18,7 +18,7 @@ insert:
 	(insmod ./$(TARGET_MODULE).ko) && (cat /proc/devices | grep HIDE_DRIVER)
 
 load: insert
-	$(eval MAJOR_NUMBER:=$(shell cat /proc/devices| grep HIDE_DRIVER | tr -d -c 0-9))
+	$(eval MAJOR_NUMBER := $(shell cat /proc/devices| grep HIDE_DRIVER | tr -d -c 0-9))
 	(mknod /dev/hide_device c $(MAJOR_NUMBER) 0) && (chmod 666 /dev/hide_device)
 
 unload:

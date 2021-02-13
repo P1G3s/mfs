@@ -15,7 +15,7 @@ clean:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) clean
 
 insert:
-	(insmod ./$(TARGET_MODULE).ko)
+	(insmod ./$(TARGET_MODULE).ko) && (cat /proc/devices | grep SWAP_DRIVER)
 
 load: insert 
 	$(eval SWAP_MAJOR_NUMBER := $(shell cat /proc/devices | grep SWAP_DRIVER | tr -d -c 0-9))

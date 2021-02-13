@@ -1,0 +1,13 @@
+#!/bin/bash
+PWD=$(pwd)
+
+pushd .
+cd $PWD/hide/source/
+make load
+
+popd
+cd $PWD/swap/source/
+make load
+
+
+

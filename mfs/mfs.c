@@ -5,7 +5,7 @@
 #endif
 
 #define _GNU_SOURCE
-#define MAXLEN 256
+#define MAXLEN 1024
 
 #ifdef linux
 /* For pread()/pwrite()/utimensat() */
@@ -69,6 +69,41 @@ static int copy_to_temp(const char* src_path, const char* temp_path){
 	}while (len > 0);
 	close(src_fd); close(temp_fd);
 	return 0;
+}
+
+static void mfs_recover(){
+	int mark_arr[1000];	
+	int i = -1;
+	int j = 0;
+	int len;
+	char mark;
+	char buf[MAXLEN];
+
+	lseek(recover_fd, 0, SEEK_SET);
+	while (read(recover_fd, &mark, 1) == 1){
+		if (mark == '\n'){
+			i++;
+			mark_arr[i] = j;
+		}
+		j++;
+	}
+
+	while (i>0){
+		len = mark_arr[i]-mark_arr[i-1]-1;
+		lseek(recover_fd, mark_arr[i-1]+1, SEEK_SET);
+		read(recover_fd, buf, len);
+		buf[len] = '\0';
+		if (unlink(buf) == -1 && errno == EISDIR)
+			rmdir(buf);
+		i--;
+	}
+	// ONE MORE
+	len = mark_arr[0];
+	lseek(recover_fd, 0, SEEK_SET);
+	read(recover_fd, buf, len);
+	buf[len] = '\0';
+	if (unlink(buf) == -1 && errno == EISDIR)
+		rmdir(buf);
 }
 
 static void *mfs_init(struct fuse_conn_info *conn,
@@ -587,7 +622,7 @@ static off_t mfs_lseek(const char *path, off_t off, int whence, struct fuse_file
 }
 
 static const struct fuse_operations mfs_oper = {
-	.init           = mfs_init,
+	.init       = mfs_init,
 	.getattr	= mfs_getattr,
 	.access		= mfs_access,
 	.readlink	= mfs_readlink,
@@ -622,7 +657,7 @@ int main(int argc, char *argv[])
 {
 	umask(0);
 
-	// INIT STUFF
+	// INIT
 	temp_count = 0;
 	fclose(fopen("mfs.log", "w"));
 	fclose(fopen("mfs.recover", "w"));
@@ -635,8 +670,15 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 	fuse_main(argc, argv, &mfs_oper, NULL);
+
+
+	// RECOVER
+	write(hide_fd, "R", 1);
+	write(swap_fd, "R", 1);
+	mfs_recover();
 	close(log_fd);
 	close(hide_fd);
 	close(swap_fd);
+	close(recover_fd);
 	return 0;
 }
