@@ -266,6 +266,7 @@ static int mfs_symlink(const char *from, const char *to)
 	int res;
 
 	res = symlink(from, to);
+	mfs_recover_log(to);
 	if (res == -1)
 		return -errno;
 
@@ -327,11 +328,19 @@ static int mfs_truncate(const char *path, off_t size,
 			struct fuse_file_info *fi)
 {
 	int res;
+	char* temp_path
 
+	temp_path = (char*) malloc(sizeof(char)*(strlen(TEMPDIR)+10));
+	if (sprintf(temp_path, "%s%d", TEMPDIR, temp_count) < 0) {mfs_log("Failed to create path\n"); return -2;}
+	temp_count += 1;
+	copy_to_temp(path, temp_path);
+
+	/*
 	if (fi != NULL)
 		res = ftruncate(fi->fh, size);
 	else
-		res = truncate(path, size);
+	*/
+	res = truncate(temp_path, size);
 	if (res == -1)
 		return -errno;
 
@@ -433,7 +442,6 @@ static int mfs_write(const char *path, const char *buf, size_t size,
 		// COPY
 		if (copy_to_temp(path, temp_path) != 0)
 			return -errno;
-		
 
 		// SWAP
 		write_len = strlen(path)+strlen(temp_path)+2;
@@ -670,7 +678,6 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 	fuse_main(argc, argv, &mfs_oper, NULL);
-
 
 	// RECOVER
 	write(hide_fd, "R", 1);
