@@ -34,23 +34,31 @@
 
 #include "mfs_helpers.h"
 
-#define TEMPDIR "/home/P1G3s/WorkSpace/MFS/mfs/TEMP/"
+#define TEMPDIR "/home/p1g3s/WorkSpace/MFS/mfs/TEMP/"
 
 static int log_fd;
 static int hide_fd;
 static int swap_fd;
-static int recover_fd;
+static int rm_fd;
+static int chmod_fd;
+
 static int temp_count;
+static int mode_count;
+static mode_t* mode_list;
 
 static void mfs_log(const char* msg){
 	write(log_fd, msg, strlen(msg));
 }
 
-static void mfs_recover_log(const char* msg){
-	write(recover_fd, msg, strlen(msg));
-	write(recover_fd, "\n", 1);
+static void mfs_rm_log(const char* msg){
+	write(rm_fd, msg, strlen(msg));
+	write(rm_fd, "\n", 1);
 }
 
+static void mfs_chmod_log(const char* msg){
+	write(chmod_fd, msg, strlen(msg));
+	write(chmod_fd, "\n", 1);
+}
 
 static int copy_to_temp(const char* src_path, const char* temp_path){
 	int src_fd, temp_fd;
@@ -58,20 +66,20 @@ static int copy_to_temp(const char* src_path, const char* temp_path){
 	struct stat src_stat;
 	
 	temp_fd = open(temp_path, O_RDWR | O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
-	if (temp_fd == -1) return -errno;
+	if (temp_fd == -1) {perror("copy_to_temp(open)"); return -errno;}
 	src_fd = open(src_path, O_RDWR);
-	if (fstat(src_fd, &src_stat) == -1) return -errno;
+	if (fstat(src_fd, &src_stat) == -1) {perror("copy_to_temp(fstat)"); return -errno;}
 	len = src_stat.st_size;
 	do{
 		ret = copy_file_range(src_fd, NULL, temp_fd, NULL, len, 0);
-		if (ret == -1) return -errno;
+		if (ret == -1) {perror("copy_to_temp(copy)"); return -errno;}
 		len -= ret;
 	}while (len > 0);
 	close(src_fd); close(temp_fd);
 	return 0;
 }
 
-static void mfs_recover(){
+static void mfs_rm_recover(){
 	int mark_arr[1000];	
 	int i = -1;
 	int j = 0;
@@ -79,19 +87,20 @@ static void mfs_recover(){
 	char mark;
 	char buf[MAXLEN];
 
-	lseek(recover_fd, 0, SEEK_SET);
-	while (read(recover_fd, &mark, 1) == 1){
+	lseek(rm_fd, 0, SEEK_SET);
+	while (read(rm_fd, &mark, 1) == 1){
 		if (mark == '\n'){
 			i++;
 			mark_arr[i] = j;
 		}
 		j++;
 	}
+	if (i == -1) return;
 
 	while (i>0){
 		len = mark_arr[i]-mark_arr[i-1]-1;
-		lseek(recover_fd, mark_arr[i-1]+1, SEEK_SET);
-		read(recover_fd, buf, len);
+		lseek(rm_fd, mark_arr[i-1]+1, SEEK_SET);
+		read(rm_fd, buf, len);
 		buf[len] = '\0';
 		if (unlink(buf) == -1 && errno == EISDIR)
 			rmdir(buf);
@@ -99,11 +108,45 @@ static void mfs_recover(){
 	}
 	// ONE MORE
 	len = mark_arr[0];
-	lseek(recover_fd, 0, SEEK_SET);
-	read(recover_fd, buf, len);
+	lseek(rm_fd, 0, SEEK_SET);
+	read(rm_fd, buf, len);
 	buf[len] = '\0';
 	if (unlink(buf) == -1 && errno == EISDIR)
 		rmdir(buf);
+}
+
+static void mfs_chmod_recover(){
+	int mark_arr[1000];	// LAZY ALLOCATION :(
+	int i = -1;
+	int j = 0;
+	int len;
+	char mark;
+	char buf[MAXLEN];
+
+	lseek(chmod_fd, 0, SEEK_SET);
+	while (read(chmod_fd, &mark, 1) == 1){
+		if (mark == '\n'){
+			i++;
+			mark_arr[i] = j;
+		}
+		j++;
+	}
+	if (i == -1) return;
+
+	while (i>0){
+		len = mark_arr[i]-mark_arr[i-1]-1;
+		lseek(chmod_fd, mark_arr[i-1]+1, SEEK_SET);
+		read(chmod_fd, buf, len);
+		buf[len] = '\0';
+		chmod(buf, mode_list[i]);
+		i--;
+	}
+	// ONE MORE
+	len = mark_arr[0];
+	lseek(chmod_fd, 0, SEEK_SET);
+	read(chmod_fd, buf, len);
+	buf[len] = '\0';
+	chmod(buf, mode_list[0]);
 }
 
 static void *mfs_init(struct fuse_conn_info *conn,
@@ -227,7 +270,7 @@ static int mfs_mkdir(const char *path, mode_t mode)
 
 	res = mkdir(path, mode);
 	setxattr(path, "user.mfs_swap", &val, sizeof(int), 0);
-	mfs_recover_log(path);
+	mfs_rm_log(path);
 	if (res == -1)
 		return -errno;
 
@@ -264,9 +307,11 @@ static int mfs_rmdir(const char *path)
 static int mfs_symlink(const char *from, const char *to)
 {
 	int res;
+	int val = 1;
 
 	res = symlink(from, to);
-	mfs_recover_log(to);
+	setxattr(to, "user.mfs_swap", &val, sizeof(int), 0);
+	mfs_rm_log(to);
 	if (res == -1)
 		return -errno;
 
@@ -290,8 +335,12 @@ static int mfs_rename(const char *from, const char *to, unsigned int flags)
 static int mfs_link(const char *from, const char *to)
 {
 	int res;
+	int val = 1;
 
 	res = link(from, to);
+	setxattr(to, "user.mfs_swap", &val, sizeof(int), 0);
+	mfs_rm_log(to);
+
 	if (res == -1)
 		return -errno;
 
@@ -303,6 +352,21 @@ static int mfs_chmod(const char *path, mode_t mode,
 {
 	(void) fi;
 	int res;
+	struct stat path_stat;
+
+	if (stat(path, &path_stat) < 0)    
+        return 1;
+	/*
+	char* msg = (char*) malloc (sizeof(char)*(strlen(path)+10));
+	if (sprintf(msg, "%s %d", path, path_stat.st_mode) < 0) {
+		printf("chmod(sprintf)");
+		return 0;
+	}
+	*/
+	mode_list[mode_count] = path_stat.st_mode;	
+	mode_count++;
+	mode_list = (mode_t*) realloc(mode_list, sizeof(mode_t)*(mode_count+1));
+	mfs_chmod_log(path);
 
 	res = chmod(path, mode);
 	if (res == -1)
@@ -311,6 +375,7 @@ static int mfs_chmod(const char *path, mode_t mode,
 	return 0;
 }
 
+/*
 static int mfs_chown(const char *path, uid_t uid, gid_t gid,
 		     struct fuse_file_info *fi)
 {
@@ -323,24 +388,47 @@ static int mfs_chown(const char *path, uid_t uid, gid_t gid,
 
 	return 0;
 }
+*/
 
 static int mfs_truncate(const char *path, off_t size,
 			struct fuse_file_info *fi)
 {
 	int res;
-	char* temp_path
+	int val=0;
 
-	temp_path = (char*) malloc(sizeof(char)*(strlen(TEMPDIR)+10));
-	if (sprintf(temp_path, "%s%d", TEMPDIR, temp_count) < 0) {mfs_log("Failed to create path\n"); return -2;}
-	temp_count += 1;
-	copy_to_temp(path, temp_path);
+	getxattr(path, "user.mfs_swap", &val, sizeof(int));
+	if (val == 0){ // ret == ENODATA?
+		int write_len;
+		char* write_val;
+		char* temp_path;
 
-	/*
+		temp_path = (char*) malloc(sizeof(char)*(strlen(TEMPDIR)+10));
+		if (sprintf(temp_path, "%s%d", TEMPDIR, temp_count) < 0) {
+			printf("truncate(sprintf)\n");
+			return 0;
+		}
+		temp_count += 1;
+
+		// COPY
+		if (copy_to_temp(path, temp_path) != 0)
+			return -errno;
+
+		// SWAP
+		write_len = strlen(path)+strlen(temp_path)+2;
+		write_val = (char*) malloc(sizeof(char)* write_len);
+		write_val[0] = 'S';
+		strcpy(write_val+1, path);
+		strcat(write_val, " ");
+		strcat(write_val, temp_path);
+		if (write(swap_fd, write_val, write_len) == -1) {mfs_log("Failed to swap\n"); return -2;}
+		
+		free(write_val); free(temp_path);
+	}
+
+	res = truncate(path, size);
 	if (fi != NULL)
 		res = ftruncate(fi->fh, size);
 	else
-	*/
-	res = truncate(temp_path, size);
 	if (res == -1)
 		return -errno;
 
@@ -371,7 +459,7 @@ static int mfs_create(const char *path, mode_t mode,
 
 	res = open(path, fi->flags, mode);
 	setxattr(path, "user.mfs_swap", &val, sizeof(int), 0);
-	mfs_recover_log(path);
+	mfs_rm_log(path);
 	if (res == -1)
 		return -errno;
 
@@ -387,7 +475,7 @@ static int mfs_open(const char *path, struct fuse_file_info *fi)
 	res = open(path, fi->flags);
 	if ((fi->flags & O_CREAT) == O_CREAT){
 		setxattr(path, "user.mfs_swap", &val, sizeof(int), 0);
-		mfs_recover_log(path);
+		mfs_rm_log(path);
 	}
 
 	if (res == -1)
@@ -425,20 +513,23 @@ static int mfs_write(const char *path, const char *buf, size_t size,
 {
 	int fd;
 	int res;
-	int ret;
-	int val;
+	int val=0;
 
 	(void) fi;
-	ret = getxattr(path, "user.mfs_swap", &val, sizeof(int));
-	if (ret == ENODATA || val == 0){
+	getxattr(path, "user.mfs_swap", &val, sizeof(int));
+	if (val == 0){ // ret == ENODATA?
 		int write_len;
 		char* write_val;
 		char* temp_path;
 
 		temp_path = (char*) malloc(sizeof(char)*(strlen(TEMPDIR)+10));
-		if (sprintf(temp_path, "%s%d", TEMPDIR, temp_count) < 0) {mfs_log("Failed to create path\n"); return -2;}
+		if (sprintf(temp_path, "%s%d", TEMPDIR, temp_count) < 0) {
+			printf("write(sprintf)\n");
+			return 0;
+		}
 		temp_count += 1;
 
+		printf("%s\n", temp_path);
 		// COPY
 		if (copy_to_temp(path, temp_path) != 0)
 			return -errno;
@@ -643,7 +734,7 @@ static const struct fuse_operations mfs_oper = {
 	.rename		= mfs_rename,
 	.link		= mfs_link,
 	.chmod		= mfs_chmod,
-	.chown		= mfs_chown,
+	//.chown		= mfs_chown,
 	.truncate	= mfs_truncate,
 #ifdef HAVE_UTIMENSAT
 	.utimens	= mfs_utimens,
@@ -667,13 +758,18 @@ int main(int argc, char *argv[])
 
 	// INIT
 	temp_count = 0;
-	fclose(fopen("mfs.log", "w"));
-	fclose(fopen("mfs.recover", "w"));
-	log_fd = open("./mfs.log", O_CREAT | O_RDWR | O_APPEND);
+	mode_count = 0;
+	mode_list = (mode_t*) malloc (sizeof(mode_t));
+	
+	fclose(fopen("./logs/ops.log", "w"));
+	fclose(fopen("./logs/rm.log", "w"));
+	fclose(fopen("./logs/chmod.log", "w"));
+	log_fd = open("./logs/ops.log", O_RDWR);
+	chmod_fd = open("./logs/chmod.log", O_RDWR);
+	rm_fd = open("./logs/rm.log", O_RDWR);
 	hide_fd = open("/dev/hide_device", O_RDWR);
 	swap_fd = open("/dev/swap_device", O_RDWR);
-	recover_fd = open("./mfs.recover", O_RDWR);
-	if ((swap_fd == -1) || (log_fd == -1) || (hide_fd == -1)){
+	if ((swap_fd == -1) || (log_fd == -1) || (hide_fd == -1) || (rm_fd == -1) || (chmod_fd == -1)){
 		printf("Failed to open logs or device\n");
 		return -1;
 	}
@@ -682,10 +778,14 @@ int main(int argc, char *argv[])
 	// RECOVER
 	write(hide_fd, "R", 1);
 	write(swap_fd, "R", 1);
-	mfs_recover();
+	mfs_rm_recover();
+	mfs_chmod_recover();
+
 	close(log_fd);
+	close(rm_fd);
+	close(chmod_fd);
 	close(hide_fd);
 	close(swap_fd);
-	close(recover_fd);
+	free(mode_list);
 	return 0;
 }

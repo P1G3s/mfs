@@ -42,6 +42,7 @@ int hide_ino_hide(const char* path){
 	int ret;
 	int val = 1;
 
+	printk(KERN_ALERT "HIDE_DRIVER: Looking for path '%s'\n", path);
 	ret = kern_path(path, LOOKUP_FOLLOW, &hidden_path);
 	if (ret) {ret = kern_path(path, LOOKUP_DIRECTORY, &hidden_path);}
 	if (ret) {pr_err("HIDE_DRIVER: Failed to look up target, err:%d\n", ret);return 1;}

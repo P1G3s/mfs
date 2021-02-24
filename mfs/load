@@ -3,10 +3,12 @@ PWD=$(pwd)
 
 pushd .
 cd $PWD/hide/source/
+make
 make load
 
 popd
 cd $PWD/swap/source/
+make
 make load
 
 

@@ -1,0 +1,1 @@
+cmd_/home/p1g3s/WorkSpace/MFS/mfs/swap/source/swap_driver.o := ld -m elf_x86_64  -z max-page-size=0x200000    -r -o /home/p1g3s/WorkSpace/MFS/mfs/swap/source/swap_driver.o /home/p1g3s/WorkSpace/MFS/mfs/swap/source/swap_device.o /home/p1g3s/WorkSpace/MFS/mfs/swap/source/swap_module.o

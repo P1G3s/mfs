@@ -1,0 +1,1 @@
+cmd_/home/p1g3s/WorkSpace/MFS/mfs/hide/source/hide_driver.mod := { echo  /home/p1g3s/WorkSpace/MFS/mfs/hide/source/hide_device.o /home/p1g3s/WorkSpace/MFS/mfs/hide/source/hide_module.o; echo; } > /home/p1g3s/WorkSpace/MFS/mfs/hide/source/hide_driver.mod
