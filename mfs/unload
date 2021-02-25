@@ -4,10 +4,12 @@ PWD=$(pwd)
 pushd .
 cd $PWD/hide/source/
 make unload
+make clean
 
 popd
 cd $PWD/swap/source/
 make unload
+make clean
 
 
 

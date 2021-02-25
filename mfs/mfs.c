@@ -213,7 +213,7 @@ static int mfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	DIR *dp;
 	struct dirent *de;
 	char file_path[MAXLEN];
-	int attr_value;
+	char val;
 	int res;
 
 	(void) offset;
@@ -230,12 +230,12 @@ static int mfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		strcat(file_path, de->d_name);
 
 		// CHECK FOR DELETED FILE
-		res = getxattr(file_path, "user.mfs_delete", &attr_value, sizeof(int));
+		res = getxattr(file_path, "user.mfs_delete", &val, sizeof(char));
 		if (res != ENODATA){
-			if (attr_value == 1){
+			if (val == '1'){
 				mfs_log(file_path);
 				mfs_log(" -> hidden\n");
-				attr_value = 0;
+				val = '0';
 				continue;
 			}
 		}
@@ -279,15 +279,26 @@ static int mfs_mkdir(const char *path, mode_t mode)
 
 static int mfs_unlink(const char *path)
 {
-	//mfs_log(path);
-	//mfs_log(" -> unlinked\n");
-	char* buf = (char*) malloc((strlen(path)+1)*sizeof(char));
-	strcpy(buf+sizeof(char),path);
-	buf[0] = 'H';
-	if (write(hide_fd, buf, strlen(buf)) == -1)
-		return -1;
-	free(buf);
-	return 0;
+	int val = 0;
+	getxattr(path, "user.mfs_swap", &val, sizeof(int));
+	// IF PATH DOESNT EXIST
+
+	if(access(path, F_OK) != 0){ 
+		return -ENOENT;
+	}
+	else if(val == 1){
+		unlink(path);
+		return 0;
+	}
+	else{
+		char* buf = (char*) malloc((strlen(path)+1)*sizeof(char));
+		strcpy(buf+sizeof(char),path);
+		buf[0] = 'H';
+		if (write(hide_fd, buf, strlen(buf)) == -1)
+			return -1;
+		free(buf);
+		return 0;
+	}
 }
 
 static int mfs_rmdir(const char *path)
@@ -396,6 +407,7 @@ static int mfs_truncate(const char *path, off_t size,
 	int res;
 	int val=0;
 
+	printf("%s\n",path);
 	getxattr(path, "user.mfs_swap", &val, sizeof(int));
 	if (val == 0){ // ret == ENODATA?
 		int write_len;
@@ -458,10 +470,10 @@ static int mfs_create(const char *path, mode_t mode,
 	int val = 1;
 
 	res = open(path, fi->flags, mode);
-	setxattr(path, "user.mfs_swap", &val, sizeof(int), 0);
-	mfs_rm_log(path);
 	if (res == -1)
 		return -errno;
+	setxattr(path, "user.mfs_swap", &val, sizeof(int), 0);
+	mfs_rm_log(path);
 
 	fi->fh = res;
 	return 0;
@@ -473,13 +485,14 @@ static int mfs_open(const char *path, struct fuse_file_info *fi)
 	int val = 1;
 
 	res = open(path, fi->flags);
+	
+
+	if (res == -1)
+		return -errno;
 	if ((fi->flags & O_CREAT) == O_CREAT){
 		setxattr(path, "user.mfs_swap", &val, sizeof(int), 0);
 		mfs_rm_log(path);
 	}
-
-	if (res == -1)
-		return -errno;
 
 	fi->fh = res;
 	return 0;
@@ -542,17 +555,17 @@ static int mfs_write(const char *path, const char *buf, size_t size,
 		strcat(write_val, " ");
 		strcat(write_val, temp_path);
 		if (write(swap_fd, write_val, write_len) == -1) {mfs_log("Failed to swap\n"); return -2;}
-		
 		free(write_val); free(temp_path);
+		fd = open(path, O_WRONLY);
+		if (fd == -1)
+			return -errno;
+		fi->fh = fd;
 	}
-	/*
 	if (fi == NULL)
 		fd = open(path, O_WRONLY);
-	else
+	else{
 		fd = fi->fh;
-	*/
-	fd = open(path, O_WRONLY);
-	
+	}
 	if (fd == -1)
 		return -errno;
 
@@ -778,8 +791,8 @@ int main(int argc, char *argv[])
 	// RECOVER
 	write(hide_fd, "R", 1);
 	write(swap_fd, "R", 1);
-	mfs_rm_recover();
 	mfs_chmod_recover();
+	mfs_rm_recover();
 
 	close(log_fd);
 	close(rm_fd);

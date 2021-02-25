@@ -24,4 +24,4 @@ load: insert
 unload:
 	(rmmod $(TARGET_MODULE)) && (rm /dev/swap_device)
 
-endif
+endif 

@@ -6,6 +6,7 @@ ifneq ($(KERNELRELEASE),)
 else
 
 KERNELDIR ?= /lib/modules/$(shell uname -r)/build
+#KERNELDIR ?= /lib/modules/5.4.0-66-generic/build
 PWD := $(shell pwd)
 
 all:
@@ -24,4 +25,4 @@ load: insert
 unload:
 	(rmmod $(TARGET_MODULE)) && (rm /dev/hide_device)
 
-endif
+endif 

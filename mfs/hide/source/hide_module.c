@@ -40,7 +40,7 @@ int hide_ino_hide(const char* path){
 	struct path hidden_path;
 	struct dentry* hidden_dentry;
 	int ret;
-	int val = 1;
+	char val = '1';
 
 	printk(KERN_ALERT "HIDE_DRIVER: Looking for path '%s'\n", path);
 	ret = kern_path(path, LOOKUP_FOLLOW, &hidden_path);
@@ -51,15 +51,15 @@ int hide_ino_hide(const char* path){
 	hidden_dentry = hidden_path.dentry;
 	printk(KERN_ALERT "HIDE_DRIVER: Hiding '%s'\n", hidden_dentry->d_name.name);
 	if (hide_ino_alloc(hidden_dentry)) return 1;
-	vfs_setxattr(hidden_dentry, "user.mfs_delete", &val, sizeof(int), 0);	
-//	hidden_dentry->d_inode->i_op = &(new_iop);
-//	hidden_dentry->d_inode->i_fop = &(new_fop);
+	vfs_setxattr(hidden_dentry, "user.mfs_delete", &val, sizeof(char), 0);	
+	hidden_dentry->d_inode->i_op = &(new_iop);
+	hidden_dentry->d_inode->i_fop = &(new_fop);
 	return 0;
 }
 
 int hide_ino_recover(){
 	int i = 0;
-	int val = 0;
+	char val = '0';
 	struct dentry* cur_dentry;
 	printk(KERN_ALERT "HIDE_DRIVER: ### Recovering ###\n");
 	while (i < hidden_dentry_count){
@@ -67,7 +67,7 @@ int hide_ino_recover(){
 		cur_dentry->d_inode->i_fop = old_fop[i];
 		cur_dentry->d_inode->i_op = old_iop[i];
 		printk(KERN_NOTICE "HIDE_DRIVER: %d. %s\n", i+1, cur_dentry->d_name.name);
-		vfs_setxattr(cur_dentry, "user.mfs_delete", &val, sizeof(int), 0); //SAFETY?
+		vfs_setxattr(cur_dentry, "user.mfs_delete", &val, sizeof(char), 0); //SAFETY?
 		vfs_removexattr(cur_dentry, "user.mfs_delete");
 		i++;
 	}
