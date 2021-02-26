@@ -268,6 +268,7 @@ static int mfs_mkdir(const char *path, mode_t mode)
 	int res;
 	int val = 1;
 
+	printf("%s\n",path);
 	res = mkdir(path, mode);
 	setxattr(path, "user.mfs_swap", &val, sizeof(int), 0);
 	mfs_rm_log(path);
@@ -303,16 +304,25 @@ static int mfs_unlink(const char *path)
 
 static int mfs_rmdir(const char *path)
 {
-
-	//mfs_log(path);
-	//mfs_log(" -> removed\n");
-	char* buf = (char*) malloc((strlen(path)+1)*sizeof(char));
-	strcpy(buf+sizeof(char),path);
-	buf[0] = 'H';
-	if (write(hide_fd, buf, strlen(buf)) == -1)
-		return -1;
-	free(buf);
-	return 0;
+	int val = 0;
+	DIR* dir = opendir(path);
+	getxattr(path, "user.mfs_swap", &val, sizeof(int));
+	if (!dir){
+		return -ENOENT;
+	}
+	else if(val == 1){
+		rmdir(path);
+		return 0;
+	}
+	else{
+		char* buf = (char*) malloc((strlen(path)+1)*sizeof(char));
+		strcpy(buf+sizeof(char),path);
+		buf[0] = 'H';
+		if (write(hide_fd, buf, strlen(buf)) == -1)
+			return -1;
+		free(buf);
+		return 0;
+	}
 }
 
 static int mfs_symlink(const char *from, const char *to)
