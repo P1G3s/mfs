@@ -34,7 +34,7 @@
 
 #include "mfs_helpers.h"
 
-#define TEMPDIR "/home/p1g3s/WorkSpace/MFS/mfs/TEMP/"
+#define TEMPDIR "/home/p1g3s/Downloads/mfs/mfs/TEMP/"
 
 static int log_fd;
 static int hide_fd;
@@ -268,7 +268,6 @@ static int mfs_mkdir(const char *path, mode_t mode)
 	int res;
 	int val = 1;
 
-	printf("%s\n",path);
 	res = mkdir(path, mode);
 	setxattr(path, "user.mfs_swap", &val, sizeof(int), 0);
 	mfs_rm_log(path);
@@ -283,6 +282,7 @@ static int mfs_unlink(const char *path)
 	int val = 0;
 	getxattr(path, "user.mfs_swap", &val, sizeof(int));
 	// IF PATH DOESNT EXIST
+	printf("unlink: %s\n", path);
 
 	if(access(path, F_OK) != 0){ 
 		return -ENOENT;
@@ -417,7 +417,6 @@ static int mfs_truncate(const char *path, off_t size,
 	int res;
 	int val=0;
 
-	printf("%s\n",path);
 	getxattr(path, "user.mfs_swap", &val, sizeof(int));
 	if (val == 0){ // ret == ENODATA?
 		int write_len;
@@ -494,9 +493,9 @@ static int mfs_open(const char *path, struct fuse_file_info *fi)
 	int res;
 	int val = 1;
 
+	printf("open: %s\n", path);
 	res = open(path, fi->flags);
 	
-
 	if (res == -1)
 		return -errno;
 	if ((fi->flags & O_CREAT) == O_CREAT){
@@ -539,8 +538,8 @@ static int mfs_write(const char *path, const char *buf, size_t size,
 	int val=0;
 
 	(void) fi;
-	getxattr(path, "user.mfs_swap", &val, sizeof(int));
-	if (val == 0){ // ret == ENODATA?
+	int ret = getxattr(path, "user.mfs_swap", &val, sizeof(int));
+	if (val == 0 || ret == ENODATA){ // ret == ENODATA?
 		int write_len;
 		char* write_val;
 		char* temp_path;
