@@ -75,7 +75,8 @@ static int copy_to_temp(const char* src_path, const char* temp_path){
 		if (ret == -1) {perror("copy_to_temp(copy)"); return -errno;}
 		len -= ret;
 	}while (len > 0);
-	close(src_fd); close(temp_fd);
+	//close(src_fd);  // it's already open in or going to be opened in mfs_write
+   	close(temp_fd);
 	return 0;
 }
 
@@ -175,6 +176,7 @@ static int mfs_getattr(const char *path, struct stat *stbuf,
 	(void) fi;
 	int res;
 
+	//printf("getattr: %s\n", path);
 	res = lstat(path, stbuf);
 	if (res == -1)
 		return -errno;
@@ -186,6 +188,7 @@ static int mfs_access(const char *path, int mask)
 {
 	int res;
 
+	printf("access: %s\n", path);
 	res = access(path, mask);
 	if (res == -1)
 		return -errno;
@@ -417,6 +420,7 @@ static int mfs_truncate(const char *path, off_t size,
 	int res;
 	int val=0;
 
+	printf("truncate: %s\n", path);
 	getxattr(path, "user.mfs_swap", &val, sizeof(int));
 	if (val == 0){ // ret == ENODATA?
 		int write_len;
@@ -478,6 +482,7 @@ static int mfs_create(const char *path, mode_t mode,
 	int res;
 	int val = 1;
 
+	printf("create: %s\n", path);
 	res = open(path, fi->flags, mode);
 	if (res == -1)
 		return -errno;
@@ -513,6 +518,7 @@ static int mfs_read(const char *path, char *buf, size_t size, off_t offset,
 	int fd;
 	int res;
 
+	printf("read: %s\n", path);
 	if(fi == NULL)
 		fd = open(path, O_RDONLY);
 	else
@@ -538,6 +544,7 @@ static int mfs_write(const char *path, const char *buf, size_t size,
 	int val=0;
 
 	(void) fi;
+	printf("write: %s\n", path);
 	int ret = getxattr(path, "user.mfs_swap", &val, sizeof(int));
 	if (val == 0 || ret == ENODATA){ // ret == ENODATA?
 		int write_len;
@@ -551,10 +558,11 @@ static int mfs_write(const char *path, const char *buf, size_t size,
 		}
 		temp_count += 1;
 
-		printf("%s\n", temp_path);
 		// COPY
-		if (copy_to_temp(path, temp_path) != 0)
+		if (copy_to_temp(path, temp_path) != 0){
+			printf("write(copy_to_temp\n");
 			return -errno;
+		}
 
 		// SWAP
 		write_len = strlen(path)+strlen(temp_path)+2;
@@ -591,6 +599,7 @@ static int mfs_statfs(const char *path, struct statvfs *stbuf)
 {
 	int res;
 
+	printf("statfs: %s\n", path);
 	res = statvfs(path, stbuf);
 	if (res == -1)
 		return -errno;
@@ -601,6 +610,7 @@ static int mfs_statfs(const char *path, struct statvfs *stbuf)
 static int mfs_release(const char *path, struct fuse_file_info *fi)
 {
 	(void) path;
+	printf("release: %s\n", path);
 	close(fi->fh);
 	return 0;
 }
@@ -609,6 +619,7 @@ static int mfs_fsync(const char *path, int isdatasync,
 		     struct fuse_file_info *fi)
 {
 	(void) path;
+	printf("fsync: %s\n", path);
 	close(fi->fh);
 	return 0;
 }

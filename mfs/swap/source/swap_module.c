@@ -58,13 +58,15 @@ void ino_recover(){
 int ino_swap(const char* src_name, const char* des_name){
 	struct path src_path;
 	struct path des_path;
+	struct file* src_filp;
+	struct file* des_filp;
 	dentry_t* src_dentry; 
 	dentry_t* des_dentry;
 	inode_t* temp;
 	int ret = 0;
 	int val = 1;
 	
-	// INODE ACQUISITION
+	// DENTRY'S INODE ACQUISITION
 	ret = kern_path(src_name, LOOKUP_FOLLOW, &src_path);
 	printk(KERN_ALERT "SWAP_DRIVER: Swapping '%s' to '%s'\n", src_name, des_name);
 	if (ret) {pr_err("SWAP_DRIVER: Failed to look up source directory, err:%d\n", ret); return 1;}
@@ -80,6 +82,15 @@ int ino_swap(const char* src_name, const char* des_name){
 
 	ino_alloc(src_dentry, des_dentry);
 	SWAP(src_dentry->d_inode, des_dentry->d_inode, temp);
+
+	// FILE'S INODE ACQUISITION
+	temp = NULL;
+	src_filp = filp_open(src_name, O_RDONLY, 0);
+	des_filp = filp_open(des_name, O_RDONLY, 0);
+	SWAP(src_filp->f_inode, des_filp->f_inode, temp);
+	filp_close(src_filp, 0);
+	filp_close(des_filp, 0);
+
 	return 0;
 }
 
