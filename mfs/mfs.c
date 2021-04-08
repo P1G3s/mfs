@@ -33,122 +33,21 @@
 #endif
 
 #include "mfs_helpers.h"
+#include "mfs_utils.h"
 
 #define TEMPDIR "/home/p1g3s/Downloads/mfs/mfs/TEMP/"
 
-static int log_fd;
+int log_fd;
+int rm_fd;
+int chmod_fd;
+int mv_fd;
 static int hide_fd;
 static int swap_fd;
-static int rm_fd;
-static int chmod_fd;
 
 static int temp_count;
 static int mode_count;
-static mode_t* mode_list;
+mode_t* mode_list;
 
-static void mfs_log(const char* msg){
-	write(log_fd, msg, strlen(msg));
-}
-
-static void mfs_rm_log(const char* msg){
-	write(rm_fd, msg, strlen(msg));
-	write(rm_fd, "\n", 1);
-}
-
-static void mfs_chmod_log(const char* msg){
-	write(chmod_fd, msg, strlen(msg));
-	write(chmod_fd, "\n", 1);
-}
-
-static int copy_to_temp(const char* src_path, const char* temp_path){
-	int src_fd, temp_fd;
-	int ret, len;
-	struct stat src_stat;
-	
-	temp_fd = open(temp_path, O_RDWR | O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
-	if (temp_fd == -1) {perror("copy_to_temp(open)"); return -errno;}
-	src_fd = open(src_path, O_RDWR);
-	if (fstat(src_fd, &src_stat) == -1) {perror("copy_to_temp(fstat)"); return -errno;}
-	len = src_stat.st_size;
-	do{
-		ret = copy_file_range(src_fd, NULL, temp_fd, NULL, len, 0);
-		if (ret == -1) {perror("copy_to_temp(copy)"); return -errno;}
-		len -= ret;
-	}while (len > 0);
-	//close(src_fd);  // it's already open in or going to be opened in mfs_write
-   	close(temp_fd);
-	return 0;
-}
-
-static void mfs_rm_recover(){
-	int mark_arr[1000];	
-	int i = -1;
-	int j = 0;
-	int len;
-	char mark;
-	char buf[MAXLEN];
-
-	lseek(rm_fd, 0, SEEK_SET);
-	while (read(rm_fd, &mark, 1) == 1){
-		if (mark == '\n'){
-			i++;
-			mark_arr[i] = j;
-		}
-		j++;
-	}
-	if (i == -1) return;
-
-	while (i>0){
-		len = mark_arr[i]-mark_arr[i-1]-1;
-		lseek(rm_fd, mark_arr[i-1]+1, SEEK_SET);
-		read(rm_fd, buf, len);
-		buf[len] = '\0';
-		if (unlink(buf) == -1 && errno == EISDIR)
-			rmdir(buf);
-		i--;
-	}
-	// ONE MORE
-	len = mark_arr[0];
-	lseek(rm_fd, 0, SEEK_SET);
-	read(rm_fd, buf, len);
-	buf[len] = '\0';
-	if (unlink(buf) == -1 && errno == EISDIR)
-		rmdir(buf);
-}
-
-static void mfs_chmod_recover(){
-	int mark_arr[1000];	// LAZY ALLOCATION :(
-	int i = -1;
-	int j = 0;
-	int len;
-	char mark;
-	char buf[MAXLEN];
-
-	lseek(chmod_fd, 0, SEEK_SET);
-	while (read(chmod_fd, &mark, 1) == 1){
-		if (mark == '\n'){
-			i++;
-			mark_arr[i] = j;
-		}
-		j++;
-	}
-	if (i == -1) return;
-
-	while (i>0){
-		len = mark_arr[i]-mark_arr[i-1]-1;
-		lseek(chmod_fd, mark_arr[i-1]+1, SEEK_SET);
-		read(chmod_fd, buf, len);
-		buf[len] = '\0';
-		chmod(buf, mode_list[i]);
-		i--;
-	}
-	// ONE MORE
-	len = mark_arr[0];
-	lseek(chmod_fd, 0, SEEK_SET);
-	read(chmod_fd, buf, len);
-	buf[len] = '\0';
-	chmod(buf, mode_list[0]);
-}
 
 static void *mfs_init(struct fuse_conn_info *conn,
 		      struct fuse_config *cfg)
@@ -280,6 +179,23 @@ static int mfs_mkdir(const char *path, mode_t mode)
 	return 0;
 }
 
+static int mfs_rename(const char *from, const char *to, unsigned int flags)
+{
+	int res;
+
+	printf("rename: %s -> %s\n", from, to);
+	mfs_mv_log(from);
+	mfs_mv_log(to);
+	if (flags)
+		return -EINVAL;
+
+	res = rename(from, to);
+	if (res == -1)
+		return -errno;
+
+	return 0;
+}
+
 static int mfs_unlink(const char *path)
 {
 	int val = 0;
@@ -295,9 +211,18 @@ static int mfs_unlink(const char *path)
 		return 0;
 	}
 	else{
-		char* buf = (char*) malloc((strlen(path)+1)*sizeof(char));
-		strcpy(buf+sizeof(char),path);
+		// CHANGE NAME (1 for 'H', 1 for '\0', 1 for suffix ".mfs"
+		int len = strlen(path)+1+1+4;
+		char* buf = (char*) malloc(len*sizeof(char));
+		buf[len-1] = '\0';
+		buf += 1;  // SAVE THE FIRST CHAR FOR 'H'
+		strcpy(buf,path);
+		strcpy(buf+strlen(path),".mfs");
+		mfs_rename(path, buf, 0);
+		// HIDE
+		buf -= 1;
 		buf[0] = 'H';
+		printf("%s\n", buf);
 		if (write(hide_fd, buf, strlen(buf)) == -1)
 			return -1;
 		free(buf);
@@ -336,20 +261,6 @@ static int mfs_symlink(const char *from, const char *to)
 	res = symlink(from, to);
 	setxattr(to, "user.mfs_swap", &val, sizeof(int), 0);
 	mfs_rm_log(to);
-	if (res == -1)
-		return -errno;
-
-	return 0;
-}
-
-static int mfs_rename(const char *from, const char *to, unsigned int flags)
-{
-	int res;
-
-	if (flags)
-		return -EINVAL;
-
-	res = rename(from, to);
 	if (res == -1)
 		return -errno;
 
@@ -483,6 +394,10 @@ static int mfs_create(const char *path, mode_t mode,
 	int val = 1;
 
 	printf("create: %s\n", path);
+	if(access(path, F_OK) == 0){ 
+		return -EEXIST;
+	}
+	
 	res = open(path, fi->flags, mode);
 	if (res == -1)
 		return -errno;
@@ -497,17 +412,54 @@ static int mfs_open(const char *path, struct fuse_file_info *fi)
 {
 	int res;
 	int val = 1;
-
 	printf("open: %s\n", path);
-	res = open(path, fi->flags);
-	
-	if (res == -1)
-		return -errno;
+
 	if ((fi->flags & O_CREAT) == O_CREAT){
+		// FILE EXIST?
+		if (access(path, F_OK) == 0){
+			return EEXIST;
+		}
+		else{
+			setxattr(path, "user.mfs_swap", &val, sizeof(int), 0);
+			mfs_rm_log(path);
+		}
+	}
+	// IF TRUNCATING, SWAP IMMEDIATELY!
+	val = 0;
+	int ret = getxattr(path, "user.mfs_swap", &val, sizeof(int));
+	if (((fi->flags & O_TRUNC) == O_TRUNC) && (ret==ENODATA || val==0)){
+		val = 1;
 		setxattr(path, "user.mfs_swap", &val, sizeof(int), 0);
-		mfs_rm_log(path);
+		int write_len;
+		char* write_val;
+		char* temp_path;
+
+		temp_path = (char*) malloc(sizeof(char)*(strlen(TEMPDIR)+10));
+		if (sprintf(temp_path, "%s%d", TEMPDIR, temp_count) < 0) {
+			printf("write(sprintf)\n");
+			return 0;
+		}
+		temp_count += 1;
+
+		// COPY
+		if (copy_to_temp(path, temp_path) != 0){
+			perror("write(copy_to_temp\n");
+			return -errno;
+		}
+		// SWAP
+		write_len = strlen(path)+strlen(temp_path)+2;
+		write_val = (char*) malloc(sizeof(char)* write_len);
+		write_val[0] = 'S';
+		strcpy(write_val+1, path);
+		strcat(write_val, " ");
+		strcat(write_val, temp_path);
+		if (write(swap_fd, write_val, write_len) == -1) {mfs_log("Failed to swap\n"); return -2;}
+		free(write_val); free(temp_path);
 	}
 
+	res = open(path, fi->flags);
+	if (res == -1)
+		return -errno;
 	fi->fh = res;
 	return 0;
 }
@@ -557,13 +509,11 @@ static int mfs_write(const char *path, const char *buf, size_t size,
 			return 0;
 		}
 		temp_count += 1;
-
 		// COPY
 		if (copy_to_temp(path, temp_path) != 0){
 			printf("write(copy_to_temp\n");
 			return -errno;
 		}
-
 		// SWAP
 		write_len = strlen(path)+strlen(temp_path)+2;
 		write_val = (char*) malloc(sizeof(char)* write_len);
@@ -580,9 +530,9 @@ static int mfs_write(const char *path, const char *buf, size_t size,
 	}
 	if (fi == NULL)
 		fd = open(path, O_WRONLY);
-	else{
+	else
 		fd = fi->fh;
-	}
+
 	if (fd == -1)
 		return -errno;
 
@@ -797,11 +747,15 @@ int main(int argc, char *argv[])
 	fclose(fopen("./logs/ops.log", "w"));
 	fclose(fopen("./logs/rm.log", "w"));
 	fclose(fopen("./logs/chmod.log", "w"));
+	fclose(fopen("./logs/mv.log", "w"));
+
 	log_fd = open("./logs/ops.log", O_RDWR);
 	chmod_fd = open("./logs/chmod.log", O_RDWR);
 	rm_fd = open("./logs/rm.log", O_RDWR);
+	mv_fd = open("./logs/mv.log", O_RDWR);
 	hide_fd = open("/dev/hide_device", O_RDWR);
 	swap_fd = open("/dev/swap_device", O_RDWR);
+
 	if ((swap_fd == -1) || (log_fd == -1) || (hide_fd == -1) || (rm_fd == -1) || (chmod_fd == -1)){
 		printf("Failed to open logs or device\n");
 		return -1;
@@ -811,11 +765,16 @@ int main(int argc, char *argv[])
 	// RECOVER
 	write(hide_fd, "R", 1);
 	write(swap_fd, "R", 1);
+	write(mv_fd, "\n", 1);
+	write(rm_fd, "\n", 1);
+	write(chmod_fd, "\n", 1);
 	mfs_chmod_recover();
 	mfs_rm_recover();
+	mfs_mv_recover();
 
-	close(log_fd);
+	close(mv_fd);
 	close(rm_fd);
+	close(log_fd);
 	close(chmod_fd);
 	close(hide_fd);
 	close(swap_fd);
